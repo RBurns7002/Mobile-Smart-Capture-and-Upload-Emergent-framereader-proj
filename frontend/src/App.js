@@ -487,8 +487,111 @@ function App() {
               RESET
             </Button>
           )}
+          
+          {/* Mobile Capture Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={createMobileSession}
+            className="font-mono text-xs border-[#22c55e]/50 text-[#22c55e] hover:bg-[#22c55e]/10 hover:border-[#22c55e] ml-2"
+            data-testid="mobile-capture-button"
+          >
+            <Smartphone className="w-4 h-4 mr-2" />
+            MOBILE CAPTURE
+          </Button>
         </div>
       </header>
+      
+      {/* Mobile Capture Modal */}
+      {showMobileCapture && mobileSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-[#0a0a0a] border border-[#27272a] w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b border-[#27272a]">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-[#22c55e]" />
+                <span className="font-mono text-sm">MOBILE CAPTURE SESSION</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closeMobileCapture}
+                className="h-8 w-8 p-0 text-[#71717a] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="p-6">
+              {/* Session Code */}
+              <div className="text-center mb-6">
+                <p className="text-xs text-[#71717a] font-mono mb-2">ENTER THIS CODE ON YOUR PHONE</p>
+                <div className="text-4xl font-mono font-bold tracking-[0.5em] text-[#22c55e]">
+                  {mobileSession.session_code}
+                </div>
+              </div>
+              
+              {/* QR Code placeholder */}
+              <div className="flex justify-center mb-6">
+                <div className="p-4 bg-white rounded-none">
+                  <div className="w-32 h-32 flex items-center justify-center">
+                    <QrCode className="w-24 h-24 text-black" />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Mobile URL */}
+              <div className="bg-[#050505] p-3 border border-[#27272a] mb-4">
+                <p className="text-[10px] text-[#71717a] font-mono mb-1">OR OPEN THIS URL ON YOUR PHONE:</p>
+                <p className="text-xs font-mono text-[#3b82f6] break-all">
+                  {window.location.origin}/mobile/capture/{mobileSession.session_code}
+                </p>
+              </div>
+              
+              {/* Status */}
+              <div className="flex items-center justify-center gap-2 p-3 bg-[#050505] border border-[#27272a]">
+                {mobileSessionStatus === 'waiting' && (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#f59e0b]" />
+                    <span className="font-mono text-xs text-[#f59e0b]">WAITING FOR DEVICE...</span>
+                  </>
+                )}
+                {mobileSessionStatus === 'connected' && (
+                  <>
+                    <Check className="w-4 h-4 text-[#22c55e]" />
+                    <span className="font-mono text-xs text-[#22c55e]">DEVICE CONNECTED</span>
+                  </>
+                )}
+                {mobileSessionStatus === 'capturing' && (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
+                    <span className="font-mono text-xs text-[#3b82f6]">RECEIVING FRAMES...</span>
+                  </>
+                )}
+                {mobileSessionStatus === 'processing' && (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
+                    <span className="font-mono text-xs text-[#3b82f6]">PROCESSING OCR...</span>
+                  </>
+                )}
+                {mobileSessionStatus === 'completed' && (
+                  <>
+                    <Check className="w-4 h-4 text-[#22c55e]" />
+                    <span className="font-mono text-xs text-[#22c55e]">COMPLETE - VIEW TRANSCRIPTS</span>
+                  </>
+                )}
+              </div>
+              
+              {/* Instructions */}
+              <div className="mt-4 space-y-2 text-[10px] text-[#71717a]">
+                <p>1. Open the URL on your Android phone</p>
+                <p>2. Follow the capture instructions</p>
+                <p>3. Upload screenshots when done</p>
+                <p className="text-[#f59e0b]">💡 For non-browser apps, use ADB automation</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Main Content */}
       <main className="p-6 max-w-7xl mx-auto">
