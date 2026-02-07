@@ -29,11 +29,12 @@ Create an app that takes a video that I record of my phone screen and is able to
 - ✅ Drag & drop video upload zone
 - ✅ Frame interval selector (0.5s, 1.0s, 2.0s, 3.0s)
 - ✅ **Frame Crop controls** - Adjust top/bottom/left/right margins (0-45%) with visual overlay preview
-- ✅ **Benchmark Mode** - Compare cropped vs uncropped OCR results with metrics:
+- ✅ **Benchmark Mode** with side-by-side transcript comparison:
+  - Two independent transcript panels (UNCROPPED vs CROPPED)
+  - Per-instance timing metrics (compute time for each)
   - Similarity percentage
-  - Character/word count comparison
-  - Extra artifacts detected in uncropped version
-  - Line-by-line diff of unique content
+  - Extra artifacts detection
+  - Real-time progress for both processes
 - ✅ Background job processing with progress tracking
 - ✅ GPT-4o vision OCR integration via Emergent LLM Key
 - ✅ Timestamped transcript display with terminal-style output
