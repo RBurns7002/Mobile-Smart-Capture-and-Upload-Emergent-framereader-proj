@@ -548,36 +548,46 @@ function Home() {
               </div>
               
               {/* Status */}
-              <div className="flex items-center justify-center gap-2 p-3 bg-[#050505] border border-[#27272a]">
-                {mobileSessionStatus === 'waiting' && (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-[#f59e0b]" />
-                    <span className="font-mono text-xs text-[#f59e0b]">WAITING FOR DEVICE...</span>
-                  </>
-                )}
-                {mobileSessionStatus === 'connected' && (
-                  <>
-                    <Check className="w-4 h-4 text-[#22c55e]" />
-                    <span className="font-mono text-xs text-[#22c55e]">DEVICE CONNECTED</span>
-                  </>
-                )}
-                {mobileSessionStatus === 'capturing' && (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
-                    <span className="font-mono text-xs text-[#3b82f6]">RECEIVING FRAMES...</span>
-                  </>
-                )}
-                {mobileSessionStatus === 'processing' && (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
-                    <span className="font-mono text-xs text-[#3b82f6]">PROCESSING OCR...</span>
-                  </>
-                )}
-                {mobileSessionStatus === 'completed' && (
-                  <>
-                    <Check className="w-4 h-4 text-[#22c55e]" />
-                    <span className="font-mono text-xs text-[#22c55e]">COMPLETE - VIEW TRANSCRIPTS</span>
-                  </>
+              <div className="flex flex-col gap-2 p-3 bg-[#050505] border border-[#27272a]">
+                <div className="flex items-center justify-center gap-2">
+                  {mobileSessionStatus === 'waiting' && (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-[#f59e0b]" />
+                      <span className="font-mono text-xs text-[#f59e0b]">WAITING FOR DEVICE...</span>
+                    </>
+                  )}
+                  {mobileSessionStatus === 'connected' && (
+                    <>
+                      <Check className="w-4 h-4 text-[#22c55e]" />
+                      <span className="font-mono text-xs text-[#22c55e]">DEVICE CONNECTED</span>
+                    </>
+                  )}
+                  {mobileSessionStatus === 'capturing' && (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
+                      <span className="font-mono text-xs text-[#3b82f6]">RECEIVING FRAMES...</span>
+                    </>
+                  )}
+                  {mobileSessionStatus === 'processing' && (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
+                      <span className="font-mono text-xs text-[#3b82f6]">PROCESSING OCR...</span>
+                    </>
+                  )}
+                  {mobileSessionStatus === 'completed' && (
+                    <>
+                      <Check className="w-4 h-4 text-[#22c55e]" />
+                      <span className="font-mono text-xs text-[#22c55e]">COMPLETE - VIEW TRANSCRIPTS</span>
+                    </>
+                  )}
+                </div>
+                
+                {/* Show detected device info when connected */}
+                {(mobileSessionStatus === 'connected' || mobileSessionStatus === 'capturing') && mobileSession?.device_detected && (
+                  <div className="text-center text-[10px] text-[#71717a] font-mono border-t border-[#27272a] pt-2 mt-1">
+                    Screen: {mobileSession.device_detected.screen_width} × {mobileSession.device_detected.screen_height}px
+                    {mobileSession.device_detected.pixel_ratio > 1 && ` @${mobileSession.device_detected.pixel_ratio}x`}
+                  </div>
                 )}
               </div>
               
