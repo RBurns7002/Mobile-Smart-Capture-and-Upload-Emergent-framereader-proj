@@ -599,7 +599,7 @@ export function MobileCapturePage() {
               FOR NON-BROWSER APPS (ChatGPT, WhatsApp)
             </h3>
             
-            <div className="bg-[#050505] p-2 font-mono text-[9px] text-[#a1a1aa] overflow-x-auto mb-2">
+            <div className="bg-[#050505] p-2 font-mono text-[9px] text-[#a1a1aa] overflow-x-auto mb-3">
               <pre>{`# Run on computer with phone connected via USB:
 adb shell settings put global window_animation_scale 0
 for i in $(seq 1 ${settings.total_captures}); do
@@ -609,7 +609,44 @@ for i in $(seq 1 ${settings.total_captures}); do
 done`}</pre>
             </div>
             
-            <p className="text-[9px] text-[#71717a]">
+            {/* Download Buttons */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 font-mono text-[10px] border-[#f59e0b]/30 text-[#f59e0b]"
+                onClick={async () => {
+                  try {
+                    const res = await axios.get(`${API}/mobile/automation/${sessionCode}/adb-script`);
+                    const blob = new Blob([res.data.script], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = res.data.filename;
+                    a.click();
+                    toast.success("Script downloaded!");
+                  } catch (e) {
+                    toast.error("Download failed");
+                  }
+                }}
+              >
+                📥 ADB SCRIPT
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 font-mono text-[10px] border-[#3b82f6]/30 text-[#3b82f6]"
+                onClick={() => {
+                  window.open('https://github.com/nicozica/framereader-android', '_blank');
+                  toast.info("Opening Android app repo...");
+                }}
+              >
+                📱 ANDROID APP
+              </Button>
+            </div>
+            
+            <p className="text-[9px] text-[#71717a] mt-2">
               Then select all frame_*.png files below to upload
             </p>
           </div>
