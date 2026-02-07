@@ -131,6 +131,48 @@ function App() {
     };
   }, [benchmarkJob?.id, benchmarkJob?.status]);
 
+  // Poll for mobile session status
+  useEffect(() => {
+    if (mobileSession && mobileSessionStatus !== 'completed' && mobileSessionStatus !== 'failed') {
+      mobilePollRef.current = setInterval(async () => {
+        try {
+          const response = await axios.get(`${API}/mobile/session/${mobileSession.session_id}`);
+          setMobileSessionStatus(response.data.status);
+          
+          if (response.data.status === 'completed') {
+            toast.success("Mobile capture processed!", { 
+              description: `${response.data.deduplicated_count || 0} unique text blocks extracted` 
+            });
+            // Load transcripts into current job view
+            if (response.data.processed_transcripts?.length > 0) {
+              setCurrentJob({
+                id: mobileSession.session_id,
+                status: 'completed',
+                transcripts: response.data.processed_transcripts.map((t, i) => ({
+                  ...t,
+                  timestamp: i * 2, // Approximate timestamps
+                })),
+                source: 'mobile'
+              });
+            }
+            clearInterval(mobilePollRef.current);
+          } else if (response.data.status === 'failed') {
+            toast.error("Processing failed", { description: response.data.error });
+            clearInterval(mobilePollRef.current);
+          }
+        } catch (error) {
+          console.error("Failed to poll mobile session:", error);
+        }
+      }, 2000);
+    }
+    
+    return () => {
+      if (mobilePollRef.current) {
+        clearInterval(mobilePollRef.current);
+      }
+    };
+  }, [mobileSession?.session_id, mobileSessionStatus]);
+
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
     setIsDragging(true);
