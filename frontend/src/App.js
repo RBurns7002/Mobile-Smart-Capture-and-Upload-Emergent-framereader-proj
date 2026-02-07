@@ -1078,6 +1078,8 @@ function App() {
                 )}
               </ScrollArea>
             </div>
+              </>
+            )}
           </div>
         </div>
       </main>
