@@ -35,6 +35,17 @@ Create an app that takes a video that I record of my phone screen and is able to
   - Similarity percentage
   - Extra artifacts detection
   - Real-time progress for both processes
+- ✅ **Mobile Capture Mode (SaaS Feature)**:
+  - One-tap session creation with 6-digit pairing code
+  - QR code + direct URL for mobile device connection
+  - Smart batch capture with configurable settings:
+    - Scroll distance (50-100% of viewport)
+    - Capture interval (500ms-5000ms)
+    - Overlap margin (0-30%)
+    - Auto-detect content height toggle
+  - ADB automation script for non-browser Android apps
+  - Automatic transcript deduplication
+  - Real-time status sync between desktop and mobile
 - ✅ Background job processing with progress tracking
 - ✅ GPT-4o vision OCR integration via Emergent LLM Key
 - ✅ Timestamped transcript display with terminal-style output
