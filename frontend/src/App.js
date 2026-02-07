@@ -402,6 +402,31 @@ function App() {
     }
   };
 
+  const createMobileSession = async () => {
+    try {
+      const response = await axios.post(`${API}/mobile/create-session`, {
+        scroll_distance_percent: 80,
+        capture_interval_ms: 1500,
+        overlap_margin_percent: 10,
+        auto_detect_height: true,
+      });
+      
+      setMobileSession(response.data);
+      setMobileSessionStatus('waiting');
+      setShowMobileCapture(true);
+      toast.success("Mobile session created", { description: "Scan QR or enter code on your phone" });
+    } catch (error) {
+      toast.error("Failed to create session", { description: error.response?.data?.detail || "Server error" });
+    }
+  };
+
+  const closeMobileCapture = () => {
+    setShowMobileCapture(false);
+    if (mobilePollRef.current) {
+      clearInterval(mobilePollRef.current);
+    }
+  };
+
   const formatTimestamp = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
