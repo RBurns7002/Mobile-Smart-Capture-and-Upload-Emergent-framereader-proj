@@ -68,6 +68,7 @@ function App() {
   const fileInputRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const benchmarkPollRef = useRef(null);
+  const mobilePollRef = useRef(null);
 
   // Poll for job status
   useEffect(() => {
