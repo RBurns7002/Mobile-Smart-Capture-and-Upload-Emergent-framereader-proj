@@ -137,27 +137,41 @@ function Home() {
       mobilePollRef.current = setInterval(async () => {
         try {
           const response = await axios.get(`${API}/mobile/session/${mobileSession.session_id}`);
-          setMobileSessionStatus(response.data.status);
+          const sessionData = response.data;
+          setMobileSessionStatus(sessionData.status);
           
-          if (response.data.status === 'completed') {
+          // Update session with device info if connected
+          if (sessionData.device_info && Object.keys(sessionData.device_info).length > 0) {
+            setMobileSession(prev => ({
+              ...prev,
+              device_detected: {
+                screen_width: sessionData.device_info.screenWidth,
+                screen_height: sessionData.device_info.screenHeight,
+                pixel_ratio: sessionData.device_info.pixelRatio,
+              }
+            }));
+          }
+          
+          if (sessionData.status === 'completed') {
             toast.success("Mobile capture processed!", { 
-              description: `${response.data.deduplicated_count || 0} unique text blocks extracted` 
+              description: `${sessionData.deduplicated_count || 0} unique text blocks extracted` 
             });
             // Load transcripts into current job view
-            if (response.data.processed_transcripts?.length > 0) {
+            if (sessionData.processed_transcripts?.length > 0) {
               setCurrentJob({
                 id: mobileSession.session_id,
                 status: 'completed',
-                transcripts: response.data.processed_transcripts.map((t, i) => ({
+                transcripts: sessionData.processed_transcripts.map((t, i) => ({
                   ...t,
                   timestamp: i * 2, // Approximate timestamps
                 })),
                 source: 'mobile'
               });
+              setShowMobileCapture(false);
             }
             clearInterval(mobilePollRef.current);
-          } else if (response.data.status === 'failed') {
-            toast.error("Processing failed", { description: response.data.error });
+          } else if (sessionData.status === 'failed') {
+            toast.error("Processing failed", { description: sessionData.error });
             clearInterval(mobilePollRef.current);
           }
         } catch (error) {
