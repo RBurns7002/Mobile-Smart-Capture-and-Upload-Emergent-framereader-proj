@@ -328,6 +328,8 @@ def compare_texts(uncropped_texts: List[str], cropped_texts: List[str]) -> dict:
 
 async def process_benchmark_job(job_id: str, video_path: str, interval: float, crop: dict):
     """Background task to process video twice - uncropped and cropped - for comparison."""
+    import time
+    
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     if not api_key:
         await db.benchmark_jobs.update_one(
@@ -361,12 +363,13 @@ async def process_benchmark_job(job_id: str, video_path: str, interval: float, c
             {"$set": {"status": "processing", "total_frames": total_frames}}
         )
         
-        # Process both sets of frames
+        # Process both sets of frames with timing
         uncropped_transcripts = []
         cropped_transcripts = []
         processed = 0
         
-        # Process uncropped frames
+        # Process uncropped frames with timing
+        uncropped_start_time = time.time()
         for idx, (frame_index, timestamp, base64_image) in enumerate(uncropped_frames):
             text = await ocr_frame(base64_image, api_key)
             if text and text != "[No text detected]":
@@ -379,11 +382,18 @@ async def process_benchmark_job(job_id: str, video_path: str, interval: float, c
             progress = int((processed / total_frames) * 100)
             await db.benchmark_jobs.update_one(
                 {"id": job_id},
-                {"$set": {"progress": progress, "uncropped_transcripts": uncropped_transcripts}}
+                {"$set": {
+                    "progress": progress, 
+                    "uncropped_transcripts": uncropped_transcripts,
+                    "uncropped_processing_time": round(time.time() - uncropped_start_time, 2)
+                }}
             )
             await asyncio.sleep(0.1)
+        uncropped_end_time = time.time()
+        uncropped_total_time = round(uncropped_end_time - uncropped_start_time, 2)
         
-        # Process cropped frames
+        # Process cropped frames with timing
+        cropped_start_time = time.time()
         for idx, (frame_index, timestamp, base64_image) in enumerate(cropped_frames):
             text = await ocr_frame(base64_image, api_key)
             if text and text != "[No text detected]":
@@ -396,9 +406,15 @@ async def process_benchmark_job(job_id: str, video_path: str, interval: float, c
             progress = int((processed / total_frames) * 100)
             await db.benchmark_jobs.update_one(
                 {"id": job_id},
-                {"$set": {"progress": progress, "cropped_transcripts": cropped_transcripts}}
+                {"$set": {
+                    "progress": progress, 
+                    "cropped_transcripts": cropped_transcripts,
+                    "cropped_processing_time": round(time.time() - cropped_start_time, 2)
+                }}
             )
             await asyncio.sleep(0.1)
+        cropped_end_time = time.time()
+        cropped_total_time = round(cropped_end_time - cropped_start_time, 2)
         
         # Generate comparison metrics
         uncropped_texts = [t["text"] for t in uncropped_transcripts]
@@ -406,13 +422,22 @@ async def process_benchmark_job(job_id: str, video_path: str, interval: float, c
         
         comparison = compare_texts(uncropped_texts, cropped_texts)
         
+        # Add timing to comparison
+        comparison["uncropped_processing_time"] = uncropped_total_time
+        comparison["cropped_processing_time"] = cropped_total_time
+        comparison["time_saved"] = round(uncropped_total_time - cropped_total_time, 2)
+        comparison["uncropped_frames_processed"] = len(uncropped_frames)
+        comparison["cropped_frames_processed"] = len(cropped_frames)
+        
         # Mark as completed
         await db.benchmark_jobs.update_one(
             {"id": job_id},
             {"$set": {
                 "status": "completed", 
                 "progress": 100,
-                "comparison": comparison
+                "comparison": comparison,
+                "uncropped_processing_time": uncropped_total_time,
+                "cropped_processing_time": cropped_total_time
             }}
         )
         
