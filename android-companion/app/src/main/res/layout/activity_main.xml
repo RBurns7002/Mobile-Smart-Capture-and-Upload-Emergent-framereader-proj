@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#050505"
+    tools:context=".MainActivity">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="24dp">
+        
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_camera"
+            android:padding="8dp"
+            android:background="#1a3b82f6" />
+        
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="12dp">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="FRAMEREADER"
+                android:textColor="#ffffff"
+                android:textSize="18sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+            
+            <TextView
+                android:id="@+id/screenInfoText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Screen: detecting..."
+                android:textColor="#71717a"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Session Code Input -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0a0a0a"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp">
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SESSION CODE"
+            android:textColor="#71717a"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="8dp" />
+        
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            
+            <EditText
+                android:id="@+id/sessionCodeInput"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="#050505"
+                android:textColor="#ffffff"
+                android:textColorHint="#71717a"
+                android:hint="Enter 6-digit code"
+                android:inputType="number"
+                android:maxLength="6"
+                android:gravity="center"
+                android:fontFamily="monospace"
+                android:textSize="20sp"
+                android:letterSpacing="0.3"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+            
+            <Button
+                android:id="@+id/connectButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="CONNECT"
+                android:textColor="#ffffff"
+                android:background="#3b82f6"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+        
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Not connected"
+            android:textColor="#71717a"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:layout_marginTop="12dp" />
+    </LinearLayout>
+
+    <!-- Settings -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0a0a0a"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp">
+        
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CAPTURE SETTINGS"
+            android:textColor="#3b82f6"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="16dp" />
+        
+        <!-- Scroll Distance -->
+        <TextView
+            android:id="@+id/scrollLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Scroll: 80%"
+            android:textColor="#71717a"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+        
+        <SeekBar
+            android:id="@+id/scrollSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="50"
+            android:progress="30"
+            android:progressTint="#3b82f6"
+            android:thumbTint="#3b82f6"
+            android:layout_marginBottom="16dp" />
+        
+        <!-- Interval -->
+        <TextView
+            android:id="@+id/intervalLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Interval: 1.5s"
+            android:textColor="#71717a"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+        
+        <SeekBar
+            android:id="@+id/intervalSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="45"
+            android:progress="10"
+            android:progressTint="#3b82f6"
+            android:thumbTint="#3b82f6"
+            android:layout_marginBottom="16dp" />
+        
+        <!-- Total Captures -->
+        <TextView
+            android:id="@+id/capturesLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Captures: 10"
+            android:textColor="#71717a"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+        
+        <SeekBar
+            android:id="@+id/capturesSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="9"
+            android:progress="1"
+            android:progressTint="#3b82f6"
+            android:thumbTint="#3b82f6" />
+    </LinearLayout>
+
+    <!-- Progress -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:visibility="gone"
+        android:progressTint="#22c55e"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Spacer -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Start Button -->
+    <Button
+        android:id="@+id/startButton"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:text="START CAPTURE"
+        android:textColor="#ffffff"
+        android:background="#22c55e"
+        android:fontFamily="monospace"
+        android:textSize="16sp"
+        android:enabled="false" />
+
+</LinearLayout>
