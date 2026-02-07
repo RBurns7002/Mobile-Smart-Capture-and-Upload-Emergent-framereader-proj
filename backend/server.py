@@ -133,7 +133,7 @@ async def ocr_frame(base64_image: str, api_key: str) -> str:
         
         user_message = UserMessage(
             text="Extract all text from this image. Output only the text content, nothing else.",
-            image_contents=[image_content]
+            file_contents=[image_content]
         )
         
         response = await chat.send_message(user_message)
