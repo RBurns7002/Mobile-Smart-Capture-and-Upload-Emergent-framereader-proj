@@ -549,6 +549,271 @@ async def get_benchmark_status(job_id: str):
     
     return job
 
+# ==================== MOBILE CAPTURE ENDPOINTS ====================
+
+@api_router.post("/mobile/create-session")
+async def create_mobile_session(settings: MobileCaptureSettings = None):
+    """Create a new mobile capture session with a pairing code."""
+    session_id = str(uuid.uuid4())
+    session_code = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
+    
+    session_doc = {
+        "session_id": session_id,
+        "session_code": session_code,
+        "status": "waiting",
+        "settings": settings.model_dump() if settings else MobileCaptureSettings().model_dump(),
+        "frames": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "device_info": None,
+        "processed_transcripts": [],
+        "processing_status": None
+    }
+    
+    await db.mobile_sessions.insert_one(session_doc)
+    mobile_sessions[session_code] = session_id
+    
+    return {
+        "session_id": session_id,
+        "session_code": session_code,
+        "status": "waiting",
+        "pairing_url": f"/mobile/capture/{session_code}"
+    }
+
+@api_router.get("/mobile/session/{session_id}")
+async def get_mobile_session(session_id: str):
+    """Get mobile session status and data."""
+    session = await db.mobile_sessions.find_one({"session_id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+@api_router.post("/mobile/connect/{session_code}")
+async def connect_mobile_device(session_code: str, device_info: dict = None):
+    """Connect a mobile device to a session using the pairing code."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid session code")
+    
+    await db.mobile_sessions.update_one(
+        {"session_code": session_code},
+        {"$set": {
+            "status": "connected",
+            "device_info": device_info or {},
+            "connected_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "session_id": session["session_id"],
+        "status": "connected",
+        "settings": session["settings"]
+    }
+
+@api_router.post("/mobile/upload-frame/{session_code}")
+async def upload_mobile_frame(
+    session_code: str,
+    frame_index: int,
+    scroll_position: int = 0,
+    file: UploadFile = File(...)
+):
+    """Upload a single frame from mobile device."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid session code")
+    
+    # Read and encode image
+    contents = await file.read()
+    base64_image = base64.b64encode(contents).decode('utf-8')
+    
+    frame_data = {
+        "frame_index": frame_index,
+        "scroll_position": scroll_position,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "image_base64": base64_image,
+        "size": len(contents)
+    }
+    
+    await db.mobile_sessions.update_one(
+        {"session_code": session_code},
+        {
+            "$push": {"frames": frame_data},
+            "$set": {"status": "capturing"}
+        }
+    )
+    
+    return {"status": "uploaded", "frame_index": frame_index}
+
+@api_router.post("/mobile/upload-batch/{session_code}")
+async def upload_mobile_batch(session_code: str, frames: List[dict]):
+    """Upload multiple frames at once from mobile device."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid session code")
+    
+    # Process each frame
+    processed_frames = []
+    for frame in frames:
+        frame_data = {
+            "frame_index": frame.get("frame_index", len(processed_frames)),
+            "scroll_position": frame.get("scroll_position", 0),
+            "timestamp": frame.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "image_base64": frame.get("image_base64"),
+            "size": len(frame.get("image_base64", ""))
+        }
+        processed_frames.append(frame_data)
+    
+    await db.mobile_sessions.update_one(
+        {"session_code": session_code},
+        {
+            "$push": {"frames": {"$each": processed_frames}},
+            "$set": {"status": "capturing"}
+        }
+    )
+    
+    return {"status": "uploaded", "frames_count": len(processed_frames)}
+
+@api_router.post("/mobile/complete-capture/{session_code}")
+async def complete_mobile_capture(session_code: str, background_tasks: BackgroundTasks):
+    """Mark capture as complete and start OCR processing."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid session code")
+    
+    await db.mobile_sessions.update_one(
+        {"session_code": session_code},
+        {"$set": {"status": "processing", "processing_status": "queued"}}
+    )
+    
+    # Start background OCR processing
+    background_tasks.add_task(process_mobile_capture, session["session_id"])
+    
+    return {"status": "processing", "session_id": session["session_id"], "frames_count": len(session.get("frames", []))}
+
+async def process_mobile_capture(session_id: str):
+    """Process all frames from a mobile capture session."""
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        await db.mobile_sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {"status": "failed", "processing_status": "error", "error": "API key not configured"}}
+        )
+        return
+    
+    session = await db.mobile_sessions.find_one({"session_id": session_id})
+    if not session:
+        return
+    
+    frames = session.get("frames", [])
+    if not frames:
+        await db.mobile_sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {"status": "completed", "processing_status": "no_frames"}}
+        )
+        return
+    
+    try:
+        transcripts = []
+        total = len(frames)
+        
+        for idx, frame in enumerate(frames):
+            # OCR the frame
+            text = await ocr_frame(frame.get("image_base64", ""), api_key)
+            
+            if text and text != "[No text detected]":
+                transcripts.append({
+                    "frame_index": frame.get("frame_index", idx),
+                    "scroll_position": frame.get("scroll_position", 0),
+                    "timestamp": frame.get("timestamp"),
+                    "text": text
+                })
+            
+            # Update progress
+            progress = int(((idx + 1) / total) * 100)
+            await db.mobile_sessions.update_one(
+                {"session_id": session_id},
+                {"$set": {
+                    "processing_status": f"processing_{progress}",
+                    "processed_transcripts": transcripts
+                }}
+            )
+            
+            await asyncio.sleep(0.1)
+        
+        # Deduplicate similar consecutive transcripts
+        deduplicated = deduplicate_transcripts(transcripts)
+        
+        await db.mobile_sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "status": "completed",
+                "processing_status": "done",
+                "processed_transcripts": deduplicated,
+                "raw_transcript_count": len(transcripts),
+                "deduplicated_count": len(deduplicated)
+            }}
+        )
+        
+    except Exception as e:
+        logging.error(f"Mobile capture processing failed: {str(e)}")
+        await db.mobile_sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {"status": "failed", "processing_status": "error", "error": str(e)}}
+        )
+
+def deduplicate_transcripts(transcripts: List[dict], similarity_threshold: float = 0.85) -> List[dict]:
+    """Remove near-duplicate consecutive transcripts based on text similarity."""
+    if not transcripts:
+        return []
+    
+    deduplicated = [transcripts[0]]
+    
+    for current in transcripts[1:]:
+        last = deduplicated[-1]
+        similarity = difflib.SequenceMatcher(None, last["text"], current["text"]).ratio()
+        
+        if similarity < similarity_threshold:
+            deduplicated.append(current)
+        else:
+            # Keep the longer one if very similar
+            if len(current["text"]) > len(last["text"]):
+                deduplicated[-1] = current
+    
+    return deduplicated
+
+@api_router.put("/mobile/settings/{session_code}")
+async def update_mobile_settings(session_code: str, settings: MobileCaptureSettings):
+    """Update capture settings for a mobile session."""
+    result = await db.mobile_sessions.update_one(
+        {"session_code": session_code},
+        {"$set": {"settings": settings.model_dump()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return {"status": "updated", "settings": settings.model_dump()}
+
+@api_router.get("/mobile/calculate-scroll")
+async def calculate_scroll_settings(
+    screen_height: int,
+    content_height: int,
+    overlap_percent: float = 10
+):
+    """Calculate optimal scroll settings based on screen and content dimensions."""
+    effective_scroll = screen_height * (1 - overlap_percent / 100)
+    total_scrolls = max(1, int((content_height - screen_height) / effective_scroll) + 1)
+    total_captures = total_scrolls + 1  # Include initial capture
+    
+    return {
+        "screen_height": screen_height,
+        "content_height": content_height,
+        "effective_scroll_distance": int(effective_scroll),
+        "overlap_pixels": int(screen_height * overlap_percent / 100),
+        "total_scrolls_needed": total_scrolls,
+        "total_captures": total_captures,
+        "scroll_positions": [int(i * effective_scroll) for i in range(total_captures)]
+    }
+
 class CropSettings(BaseModel):
     top: float = 0
     bottom: float = 0
