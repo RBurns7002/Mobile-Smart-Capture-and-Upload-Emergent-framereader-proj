@@ -17,6 +17,7 @@ from PIL import Image
 import tempfile
 import asyncio
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+import difflib
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -264,6 +265,239 @@ async def upload_video(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+
+class BenchmarkResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    status: str
+    progress: int
+    uncropped_transcripts: List[dict]
+    cropped_transcripts: List[dict]
+    comparison: Optional[dict] = None
+    error: Optional[str] = None
+    created_at: str
+
+def compare_texts(uncropped_texts: List[str], cropped_texts: List[str]) -> dict:
+    """Compare uncropped vs cropped OCR results and generate metrics."""
+    # Combine all texts
+    uncropped_combined = "\n".join(uncropped_texts)
+    cropped_combined = "\n".join(cropped_texts)
+    
+    # Calculate similarity ratio
+    similarity = difflib.SequenceMatcher(None, cropped_combined, uncropped_combined).ratio()
+    
+    # Find unique words in each
+    uncropped_words = set(uncropped_combined.lower().split())
+    cropped_words = set(cropped_combined.lower().split())
+    
+    # Extra words in uncropped (potential artifacts)
+    extra_in_uncropped = uncropped_words - cropped_words
+    extra_in_cropped = cropped_words - uncropped_words
+    common_words = uncropped_words & cropped_words
+    
+    # Character counts
+    uncropped_chars = len(uncropped_combined)
+    cropped_chars = len(cropped_combined)
+    
+    # Line-by-line diff
+    uncropped_lines = uncropped_combined.split('\n')
+    cropped_lines = cropped_combined.split('\n')
+    
+    differ = difflib.Differ()
+    diff_lines = list(differ.compare(cropped_lines, uncropped_lines))
+    
+    # Count additions and removals
+    additions = [line[2:] for line in diff_lines if line.startswith('+ ')]
+    removals = [line[2:] for line in diff_lines if line.startswith('- ')]
+    
+    return {
+        "similarity_percentage": round(similarity * 100, 2),
+        "uncropped_char_count": uncropped_chars,
+        "cropped_char_count": cropped_chars,
+        "char_difference": uncropped_chars - cropped_chars,
+        "uncropped_word_count": len(uncropped_words),
+        "cropped_word_count": len(cropped_words),
+        "common_words": len(common_words),
+        "extra_words_in_uncropped": len(extra_in_uncropped),
+        "extra_words_in_cropped": len(extra_in_cropped),
+        "extra_artifacts": list(extra_in_uncropped)[:50],  # Limit to 50 for display
+        "missing_in_uncropped": list(extra_in_cropped)[:50],
+        "lines_only_in_uncropped": additions[:20],  # Lines present only in uncropped
+        "lines_only_in_cropped": removals[:20],  # Lines present only in cropped
+    }
+
+async def process_benchmark_job(job_id: str, video_path: str, interval: float, crop: dict):
+    """Background task to process video twice - uncropped and cropped - for comparison."""
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        await db.benchmark_jobs.update_one(
+            {"id": job_id},
+            {"$set": {"status": "failed", "error": "EMERGENT_LLM_KEY not configured"}}
+        )
+        return
+    
+    try:
+        # Update status
+        await db.benchmark_jobs.update_one(
+            {"id": job_id},
+            {"$set": {"status": "extracting_frames"}}
+        )
+        
+        # Extract frames for both versions in parallel
+        import asyncio
+        uncropped_task = asyncio.create_task(
+            extract_frames_from_video(video_path, interval, None)
+        )
+        cropped_task = asyncio.create_task(
+            extract_frames_from_video(video_path, interval, crop)
+        )
+        
+        uncropped_frames, cropped_frames = await asyncio.gather(uncropped_task, cropped_task)
+        
+        total_frames = len(uncropped_frames) + len(cropped_frames)
+        
+        await db.benchmark_jobs.update_one(
+            {"id": job_id},
+            {"$set": {"status": "processing", "total_frames": total_frames}}
+        )
+        
+        # Process both sets of frames
+        uncropped_transcripts = []
+        cropped_transcripts = []
+        processed = 0
+        
+        # Process uncropped frames
+        for idx, (frame_index, timestamp, base64_image) in enumerate(uncropped_frames):
+            text = await ocr_frame(base64_image, api_key)
+            if text and text != "[No text detected]":
+                uncropped_transcripts.append({
+                    "timestamp": round(timestamp, 2),
+                    "text": text,
+                    "frame_index": frame_index
+                })
+            processed += 1
+            progress = int((processed / total_frames) * 100)
+            await db.benchmark_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"progress": progress, "uncropped_transcripts": uncropped_transcripts}}
+            )
+            await asyncio.sleep(0.1)
+        
+        # Process cropped frames
+        for idx, (frame_index, timestamp, base64_image) in enumerate(cropped_frames):
+            text = await ocr_frame(base64_image, api_key)
+            if text and text != "[No text detected]":
+                cropped_transcripts.append({
+                    "timestamp": round(timestamp, 2),
+                    "text": text,
+                    "frame_index": frame_index
+                })
+            processed += 1
+            progress = int((processed / total_frames) * 100)
+            await db.benchmark_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"progress": progress, "cropped_transcripts": cropped_transcripts}}
+            )
+            await asyncio.sleep(0.1)
+        
+        # Generate comparison metrics
+        uncropped_texts = [t["text"] for t in uncropped_transcripts]
+        cropped_texts = [t["text"] for t in cropped_transcripts]
+        
+        comparison = compare_texts(uncropped_texts, cropped_texts)
+        
+        # Mark as completed
+        await db.benchmark_jobs.update_one(
+            {"id": job_id},
+            {"$set": {
+                "status": "completed", 
+                "progress": 100,
+                "comparison": comparison
+            }}
+        )
+        
+    except Exception as e:
+        logging.error(f"Benchmark job {job_id} failed: {str(e)}")
+        await db.benchmark_jobs.update_one(
+            {"id": job_id},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
+    finally:
+        # Don't delete video file - might be used for regular processing too
+        pass
+
+@api_router.post("/benchmark-video")
+async def benchmark_video(
+    background_tasks: BackgroundTasks,
+    file_id: str,
+    filename: str,
+    frame_interval: float = 1.0,
+    crop_top: float = 0,
+    crop_bottom: float = 0,
+    crop_left: float = 0,
+    crop_right: float = 0
+):
+    """Start benchmark processing - runs OCR on both cropped and uncropped versions."""
+    # Validate frame interval
+    if frame_interval < 0.5 or frame_interval > 5.0:
+        raise HTTPException(status_code=400, detail="Frame interval must be between 0.5 and 5.0 seconds")
+    
+    # Validate crop values - need at least some crop for meaningful benchmark
+    if crop_top == 0 and crop_bottom == 0 and crop_left == 0 and crop_right == 0:
+        raise HTTPException(status_code=400, detail="Please set crop values to compare against uncropped version")
+    
+    # Find the video file
+    video_path = None
+    for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v']:
+        potential_path = UPLOAD_DIR / f"{file_id}{ext}"
+        if potential_path.exists():
+            video_path = str(potential_path)
+            break
+    
+    if not video_path:
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    crop = {
+        "top": crop_top,
+        "bottom": crop_bottom,
+        "left": crop_left,
+        "right": crop_right
+    }
+    
+    # Create benchmark job
+    job_id = str(uuid.uuid4())
+    job_doc = {
+        "id": job_id,
+        "file_id": file_id,
+        "filename": filename,
+        "frame_interval": frame_interval,
+        "crop": crop,
+        "status": "queued",
+        "progress": 0,
+        "total_frames": 0,
+        "uncropped_transcripts": [],
+        "cropped_transcripts": [],
+        "comparison": None,
+        "error": None,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.benchmark_jobs.insert_one(job_doc)
+    
+    # Start background processing
+    background_tasks.add_task(process_benchmark_job, job_id, video_path, frame_interval, crop)
+    
+    return {"job_id": job_id, "status": "queued", "type": "benchmark"}
+
+@api_router.get("/benchmark/{job_id}")
+async def get_benchmark_status(job_id: str):
+    """Get the status and results of a benchmark job."""
+    job = await db.benchmark_jobs.find_one({"id": job_id}, {"_id": 0})
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Benchmark job not found")
+    
+    return job
 
 class CropSettings(BaseModel):
     top: float = 0
