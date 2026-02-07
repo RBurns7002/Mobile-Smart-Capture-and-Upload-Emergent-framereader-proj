@@ -1,52 +1,526 @@
-import { useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
 import axios from "axios";
+import { Toaster, toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Upload,
+  Play,
+  Copy,
+  Download,
+  FileText,
+  Clock,
+  Trash2,
+  RefreshCw,
+  Video,
+  Settings,
+  FileVideo,
+  Loader2,
+  Check,
+  AlertCircle,
+} from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
+function App() {
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [frameInterval, setFrameInterval] = useState("1.0");
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentJob, setCurrentJob] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  const pollIntervalRef = useRef(null);
+
+  // Poll for job status
+  useEffect(() => {
+    if (currentJob && (currentJob.status === "queued" || currentJob.status === "processing" || currentJob.status === "extracting_frames")) {
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const response = await axios.get(`${API}/job/${currentJob.id}`);
+          setCurrentJob(response.data);
+          
+          if (response.data.status === "completed") {
+            setIsProcessing(false);
+            toast.success("Processing complete!", { description: `Extracted text from ${response.data.transcripts.length} frames` });
+            clearInterval(pollIntervalRef.current);
+          } else if (response.data.status === "failed") {
+            setIsProcessing(false);
+            toast.error("Processing failed", { description: response.data.error });
+            clearInterval(pollIntervalRef.current);
+          }
+        } catch (error) {
+          console.error("Failed to poll job status:", error);
+        }
+      }, 1500);
+    }
+    
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, [currentJob?.id, currentJob?.status]);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  }, []);
+
+  const handleFileSelect = (file) => {
+    const allowedTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm', 'video/x-m4v'];
+    
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp4|mov|avi|mkv|webm|m4v)$/i)) {
+      toast.error("Invalid file type", { description: "Please upload MP4, MOV, AVI, MKV, or WebM video" });
+      return;
+    }
+    
+    setVideoFile(file);
+    setVideoPreview(URL.createObjectURL(file));
+    setUploadedFile(null);
+    setCurrentJob(null);
+  };
+
+  const handleFileInputChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFileSelect(e.target.files[0]);
     }
   };
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+  const uploadVideo = async () => {
+    if (!videoFile) return;
+    
+    setIsUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', videoFile);
+      
+      const response = await axios.post(`${API}/upload-video`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setUploadedFile(response.data);
+      toast.success("Video uploaded", { description: "Ready to process" });
+    } catch (error) {
+      toast.error("Upload failed", { description: error.response?.data?.detail || "Failed to upload video" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const processVideo = async () => {
+    if (!uploadedFile) {
+      await uploadVideo();
+      return;
+    }
+    
+    setIsProcessing(true);
+    
+    try {
+      const response = await axios.post(`${API}/process-video`, null, {
+        params: {
+          file_id: uploadedFile.file_id,
+          filename: uploadedFile.filename,
+          frame_interval: parseFloat(frameInterval)
+        }
+      });
+      
+      setCurrentJob({ id: response.data.job_id, status: "queued", progress: 0, transcripts: [] });
+      toast.info("Processing started", { description: "Extracting frames and running OCR..." });
+    } catch (error) {
+      setIsProcessing(false);
+      toast.error("Processing failed", { description: error.response?.data?.detail || "Failed to start processing" });
+    }
+  };
+
+  const handleProcess = async () => {
+    if (!uploadedFile) {
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', videoFile);
+        
+        const uploadResponse = await axios.post(`${API}/upload-video`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        setUploadedFile(uploadResponse.data);
+        
+        // Start processing immediately
+        setIsProcessing(true);
+        const processResponse = await axios.post(`${API}/process-video`, null, {
+          params: {
+            file_id: uploadResponse.data.file_id,
+            filename: uploadResponse.data.filename,
+            frame_interval: parseFloat(frameInterval)
+          }
+        });
+        
+        setCurrentJob({ id: processResponse.data.job_id, status: "queued", progress: 0, transcripts: [] });
+        toast.info("Processing started", { description: "Extracting frames and running OCR..." });
+      } catch (error) {
+        toast.error("Failed", { description: error.response?.data?.detail || "Operation failed" });
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      await processVideo();
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (!currentJob?.transcripts?.length) return;
+    
+    const text = currentJob.transcripts
+      .map(t => `[${formatTimestamp(t.timestamp)}]\n${t.text}`)
+      .join('\n\n');
+    
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
+
+  const exportToFile = () => {
+    if (!currentJob?.transcripts?.length) return;
+    
+    const text = currentJob.transcripts
+      .map(t => `[${formatTimestamp(t.timestamp)}]\n${t.text}`)
+      .join('\n\n');
+    
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transcript-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("File downloaded");
+  };
+
+  const resetAll = () => {
+    setVideoFile(null);
+    setVideoPreview(null);
+    setUploadedFile(null);
+    setCurrentJob(null);
+    setIsProcessing(false);
+    setIsUploading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const formatTimestamp = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getStatusText = () => {
+    if (!currentJob) return null;
+    switch (currentJob.status) {
+      case 'queued': return 'Queued...';
+      case 'extracting_frames': return 'Extracting frames...';
+      case 'processing': return `Processing frames (${currentJob.progress}%)`;
+      case 'completed': return 'Completed';
+      case 'failed': return 'Failed';
+      default: return currentJob.status;
+    }
+  };
 
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
+    <div className="app-container min-h-screen">
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          style: {
+            background: '#0a0a0a',
+            border: '1px solid #27272a',
+            color: '#fafafa',
+            fontFamily: 'JetBrains Mono, monospace',
+          }
+        }}
+      />
+      
+      {/* Scanline effect */}
+      <div className="scanline" />
+      
+      {/* Header */}
+      <header className="app-header px-6 py-4" data-testid="app-header">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#3b82f6]/20 border border-[#3b82f6]/30">
+              <FileVideo className="w-5 h-5 text-[#3b82f6]" />
+            </div>
+            <div>
+              <h1 className="font-mono text-lg font-medium tracking-tight">FRAME_READER</h1>
+              <p className="text-xs text-[#71717a] font-mono">VIDEO OCR TRANSCRIPT EXTRACTOR</p>
+            </div>
+          </div>
+          
+          {videoFile && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetAll}
+              className="font-mono text-xs text-[#71717a] hover:text-white hover:bg-white/5"
+              data-testid="reset-button"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              RESET
+            </Button>
+          )}
+        </div>
       </header>
-    </div>
-  );
-};
-
-function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      
+      {/* Main Content */}
+      <main className="p-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" style={{ minHeight: 'calc(100vh - 120px)' }}>
+          
+          {/* Left Panel - Upload & Preview */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            
+            {/* Upload Zone */}
+            <div className="panel flex-1 flex flex-col">
+              <div className="panel-header flex items-center gap-2">
+                <Upload className="w-4 h-4 text-[#3b82f6]" />
+                <span className="font-mono text-sm">VIDEO INPUT</span>
+              </div>
+              
+              <div className="flex-1 p-4">
+                {!videoPreview ? (
+                  <div
+                    className={`upload-zone h-full min-h-[300px] flex flex-col items-center justify-center gap-4 ${isDragging ? 'dragging' : ''}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    data-testid="upload-dropzone"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".mp4,.mov,.avi,.mkv,.webm,.m4v,video/*"
+                      onChange={handleFileInputChange}
+                      className="hidden"
+                      data-testid="file-input"
+                    />
+                    
+                    <div className="p-4 border border-dashed border-[#27272a] group-hover:border-[#3b82f6]/50">
+                      <Video className="w-10 h-10 text-[#71717a]" />
+                    </div>
+                    
+                    <div className="text-center">
+                      <p className="font-mono text-sm text-white mb-1">DROP VIDEO FILE HERE</p>
+                      <p className="text-xs text-[#71717a]">or click to browse</p>
+                    </div>
+                    
+                    <p className="text-xs text-[#71717a] font-mono">
+                      MP4 / MOV / AVI / MKV / WebM
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-full flex flex-col gap-4">
+                    <video
+                      src={videoPreview}
+                      controls
+                      className="video-preview w-full flex-1 bg-black"
+                      data-testid="video-preview"
+                    />
+                    
+                    <div className="flex items-center justify-between text-xs text-[#71717a] font-mono px-1">
+                      <span>{videoFile?.name}</span>
+                      <span>{(videoFile?.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Settings & Process */}
+            <div className="panel">
+              <div className="panel-header flex items-center gap-2">
+                <Settings className="w-4 h-4 text-[#3b82f6]" />
+                <span className="font-mono text-sm">SETTINGS</span>
+              </div>
+              
+              <div className="p-4">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#71717a]" />
+                    <span className="font-mono text-sm">Frame Interval</span>
+                  </div>
+                  
+                  <Select value={frameInterval} onValueChange={setFrameInterval} data-testid="frame-interval-select">
+                    <SelectTrigger className="w-32 bg-[#0a0a0a] border-[#27272a] font-mono text-sm rounded-none" data-testid="frame-interval-trigger">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0a0a0a] border-[#27272a] font-mono rounded-none">
+                      <SelectItem value="0.5" className="font-mono">0.5 sec</SelectItem>
+                      <SelectItem value="1.0" className="font-mono">1.0 sec</SelectItem>
+                      <SelectItem value="2.0" className="font-mono">2.0 sec</SelectItem>
+                      <SelectItem value="3.0" className="font-mono">3.0 sec</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <Button
+                  className="w-full btn-primary py-5 rounded-none"
+                  onClick={handleProcess}
+                  disabled={!videoFile || isUploading || isProcessing}
+                  data-testid="process-button"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      UPLOADING...
+                    </>
+                  ) : isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      PROCESSING...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      EXTRACT TEXT
+                    </>
+                  )}
+                </Button>
+                
+                {/* Progress */}
+                {currentJob && (currentJob.status === 'processing' || currentJob.status === 'extracting_frames') && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-mono text-[#71717a]">{getStatusText()}</span>
+                      <span className="text-xs font-mono text-[#3b82f6]">{currentJob.progress}%</span>
+                    </div>
+                    <Progress value={currentJob.progress} className="h-1 rounded-none bg-[#27272a]" data-testid="progress-bar" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Right Panel - Transcript Output */}
+          <div className="lg:col-span-5 flex flex-col lg:border-l lg:border-[#27272a]/50 lg:pl-6">
+            <div className="panel flex-1 flex flex-col">
+              <div className="panel-header flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#22c55e]" />
+                  <span className="font-mono text-sm">TRANSCRIPT OUTPUT</span>
+                </div>
+                
+                {currentJob?.transcripts?.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyToClipboard}
+                      className="h-7 px-2 text-[#71717a] hover:text-white hover:bg-white/5"
+                      data-testid="copy-button"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={exportToFile}
+                      className="h-7 px-2 text-[#71717a] hover:text-white hover:bg-white/5"
+                      data-testid="export-button"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
+              <ScrollArea className="flex-1" data-testid="transcript-scroll-area">
+                {!currentJob ? (
+                  <div className="empty-state h-full min-h-[400px]">
+                    <FileText className="w-12 h-12 mb-4 opacity-30" />
+                    <p className="font-mono text-sm">NO TRANSCRIPT YET</p>
+                    <p className="text-xs mt-2">Upload a video and click Extract Text</p>
+                  </div>
+                ) : currentJob.status === 'failed' ? (
+                  <div className="empty-state h-full min-h-[400px]">
+                    <AlertCircle className="w-12 h-12 mb-4 text-[#ef4444] opacity-70" />
+                    <p className="font-mono text-sm text-[#ef4444]">PROCESSING FAILED</p>
+                    <p className="text-xs mt-2 text-[#71717a] max-w-xs text-center">{currentJob.error}</p>
+                  </div>
+                ) : currentJob.transcripts?.length === 0 && currentJob.status !== 'completed' ? (
+                  <div className="empty-state h-full min-h-[400px]">
+                    <Loader2 className="w-12 h-12 mb-4 animate-spin text-[#3b82f6]" />
+                    <p className="font-mono text-sm">{getStatusText()}</p>
+                    <p className="text-xs mt-2">This may take a few minutes...</p>
+                  </div>
+                ) : currentJob.transcripts?.length === 0 && currentJob.status === 'completed' ? (
+                  <div className="empty-state h-full min-h-[400px]">
+                    <Check className="w-12 h-12 mb-4 text-[#22c55e]" />
+                    <p className="font-mono text-sm">PROCESSING COMPLETE</p>
+                    <p className="text-xs mt-2 text-[#71717a]">No text was detected in the video frames</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-[#27272a]" data-testid="transcript-list">
+                    {currentJob.transcripts.map((entry, index) => (
+                      <div key={index} className="transcript-entry" data-testid={`transcript-entry-${index}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="timestamp-badge">
+                            {formatTimestamp(entry.timestamp)}
+                          </span>
+                          <span className="text-[10px] text-[#71717a] font-mono">
+                            FRAME #{entry.frame_index}
+                          </span>
+                        </div>
+                        <p className="text-sm text-[#e4e4e7] whitespace-pre-wrap leading-relaxed font-mono">
+                          {entry.text}
+                        </p>
+                      </div>
+                    ))}
+                    
+                    {currentJob.status === 'completed' && (
+                      <div className="p-4 bg-[#22c55e]/10 border-t border-[#22c55e]/20">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-[#22c55e]" />
+                          <span className="font-mono text-xs text-[#22c55e]">
+                            EXTRACTION COMPLETE - {currentJob.transcripts.length} FRAMES WITH TEXT
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
