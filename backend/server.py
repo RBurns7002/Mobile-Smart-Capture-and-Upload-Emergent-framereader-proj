@@ -594,11 +594,31 @@ async def connect_mobile_device(session_code: str, device_info: dict = None):
     if not session:
         raise HTTPException(status_code=404, detail="Invalid session code")
     
+    # Extract device dimensions for smart scroll calculation
+    screen_width = device_info.get('screenWidth', 0) if device_info else 0
+    screen_height = device_info.get('screenHeight', 0) if device_info else 0
+    pixel_ratio = device_info.get('pixelRatio', 1) if device_info else 1
+    
+    # Update settings with detected device info
+    current_settings = session.get('settings', {})
+    current_settings['screen_width'] = screen_width
+    current_settings['screen_height'] = screen_height
+    current_settings['pixel_ratio'] = pixel_ratio
+    
+    # Calculate smart defaults based on screen size
+    if screen_height > 0:
+        # Effective scroll = screen height * scroll_percent * (1 - overlap)
+        scroll_percent = current_settings.get('scroll_distance_percent', 80) / 100
+        overlap_percent = current_settings.get('overlap_margin_percent', 10) / 100
+        effective_scroll = int(screen_height * scroll_percent * (1 - overlap_percent))
+        current_settings['effective_scroll_px'] = effective_scroll
+    
     await db.mobile_sessions.update_one(
         {"session_code": session_code},
         {"$set": {
             "status": "connected",
             "device_info": device_info or {},
+            "settings": current_settings,
             "connected_at": datetime.now(timezone.utc).isoformat()
         }}
     )
@@ -606,7 +626,12 @@ async def connect_mobile_device(session_code: str, device_info: dict = None):
     return {
         "session_id": session["session_id"],
         "status": "connected",
-        "settings": session["settings"]
+        "settings": current_settings,
+        "device_detected": {
+            "screen_width": screen_width,
+            "screen_height": screen_height,
+            "pixel_ratio": pixel_ratio,
+        }
     }
 
 @api_router.post("/mobile/upload-frame/{session_code}")
