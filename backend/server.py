@@ -356,8 +356,11 @@ async def delete_job(job_id: str):
 
 @api_router.get("/jobs")
 async def list_jobs():
-    """List all jobs."""
-    jobs = await db.ocr_jobs.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    """List all jobs (without full transcripts for performance)."""
+    jobs = await db.ocr_jobs.find(
+        {}, 
+        {"_id": 0, "id": 1, "filename": 1, "status": 1, "progress": 1, "total_frames": 1, "created_at": 1, "error": 1}
+    ).sort("created_at", -1).limit(100).to_list(100)
     return jobs
 
 # Legacy routes for compatibility
@@ -372,7 +375,7 @@ async def create_status_check(input: StatusCheckCreate):
 
 @api_router.get("/status", response_model=List[StatusCheck])
 async def get_status_checks():
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
+    status_checks = await db.status_checks.find({}, {"_id": 0}).limit(100).to_list(100)
     for check in status_checks:
         if isinstance(check['timestamp'], str):
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
