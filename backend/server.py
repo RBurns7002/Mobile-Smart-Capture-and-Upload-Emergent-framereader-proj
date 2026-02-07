@@ -839,6 +839,139 @@ async def calculate_scroll_settings(
         "scroll_positions": [int(i * effective_scroll) for i in range(total_captures)]
     }
 
+@api_router.get("/mobile/automation/{session_code}/tasker")
+async def get_tasker_profile(session_code: str):
+    """Generate a Tasker profile pre-configured with session code."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    settings = session.get("settings", {})
+    device_info = session.get("device_info", {})
+    
+    scroll_px = int(device_info.get("screenHeight", 800) * settings.get("scroll_distance_percent", 80) / 100)
+    
+    tasker_xml = f'''<?xml version="1.0" encoding="utf-8"?>
+<TaskerData sr="" dession="com.joaomgcd.tasker" sv="4">
+  <Task sr="task1">
+    <cname>FrameReader_{session_code}</cname>
+    <id>1</id>
+    <Action sr="act0" ve="7">
+      <code>547</code>
+      <Str sr="arg0" ve="3">session_code</Str>
+      <Str sr="arg1" ve="3">{session_code}</Str>
+    </Action>
+    <Action sr="act1" ve="7">
+      <code>547</code>
+      <Str sr="arg0" ve="3">api_url</Str>
+      <Str sr="arg1" ve="3">https://framereader.preview.emergentagent.com/api</Str>
+    </Action>
+    <Action sr="act2" ve="7">
+      <code>547</code>
+      <Str sr="arg0" ve="3">scroll_px</Str>
+      <Str sr="arg1" ve="3">{scroll_px}</Str>
+    </Action>
+    <Action sr="act3" ve="7">
+      <code>547</code>
+      <Str sr="arg0" ve="3">interval_ms</Str>
+      <Str sr="arg1" ve="3">{settings.get("capture_interval_ms", 1500)}</Str>
+    </Action>
+    <Action sr="act4" ve="7">
+      <code>547</code>
+      <Str sr="arg0" ve="3">total_captures</Str>
+      <Str sr="arg1" ve="3">{settings.get("total_captures", 10)}</Str>
+    </Action>
+  </Task>
+</TaskerData>'''
+    
+    return JSONResponse(
+        content={"xml": tasker_xml, "filename": f"framereader_{session_code}.tsk.xml"},
+        headers={"Content-Type": "application/json"}
+    )
+
+@api_router.get("/mobile/automation/{session_code}/adb-script")
+async def get_adb_script(session_code: str):
+    """Generate an ADB shell script pre-configured with session settings."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    settings = session.get("settings", {})
+    device_info = session.get("device_info", {})
+    
+    screen_height = device_info.get("screenHeight", 2400)
+    scroll_percent = settings.get("scroll_distance_percent", 80)
+    scroll_px = int(screen_height * scroll_percent / 100)
+    interval = settings.get("capture_interval_ms", 1500) / 1000
+    total = settings.get("total_captures", 10)
+    
+    script = f'''#!/bin/bash
+# FrameReader Auto-Capture Script
+# Session: {session_code}
+# Generated for screen height: {screen_height}px
+
+API_URL="https://framereader.preview.emergentagent.com/api"
+SESSION="{session_code}"
+SCROLL_PX={scroll_px}
+INTERVAL={interval}
+TOTAL={total}
+
+# Create temp directory
+mkdir -p /tmp/framereader_captures
+
+# Connect to session
+curl -X POST "$API_URL/mobile/connect/$SESSION" \\
+  -H "Content-Type: application/json" \\
+  -d '{{"userAgent":"ADB-Script","screenHeight":{screen_height},"screenWidth":{device_info.get("screenWidth", 1080)}}}'
+
+echo "Starting capture in 3 seconds..."
+sleep 3
+
+# Disable animations for smoother capture
+adb shell settings put global window_animation_scale 0
+adb shell settings put global transition_animation_scale 0
+adb shell settings put global animator_duration_scale 0
+
+# Capture loop
+for i in $(seq 1 $TOTAL); do
+  echo "Capturing frame $i/$TOTAL..."
+  
+  # Take screenshot
+  adb exec-out screencap -p > /tmp/framereader_captures/frame_$i.png
+  
+  # Convert to base64 and upload
+  BASE64=$(base64 -w 0 /tmp/framereader_captures/frame_$i.png)
+  
+  curl -X POST "$API_URL/mobile/upload-batch/$SESSION" \\
+    -H "Content-Type: application/json" \\
+    -d "[{{\\"frame_index\\":$i,\\"scroll_position\\":$((i * SCROLL_PX)),\\"image_base64\\":\\"$BASE64\\"}}]"
+  
+  # Scroll down
+  adb shell input swipe 540 $((screen_height - 200)) 540 $((screen_height - 200 - SCROLL_PX)) 300
+  
+  sleep $INTERVAL
+done
+
+# Complete capture
+curl -X POST "$API_URL/mobile/complete-capture/$SESSION" \\
+  -H "Content-Type: application/json" -d '{{}}'
+
+# Re-enable animations
+adb shell settings put global window_animation_scale 1
+adb shell settings put global transition_animation_scale 1
+adb shell settings put global animator_duration_scale 1
+
+# Cleanup
+rm -rf /tmp/framereader_captures
+
+echo "Capture complete! Check web app for results."
+'''
+    
+    return JSONResponse(
+        content={"script": script, "filename": f"framereader_{session_code}.sh"},
+        headers={"Content-Type": "application/json"}
+    )
+
 class CropSettings(BaseModel):
     top: float = 0
     bottom: float = 0
