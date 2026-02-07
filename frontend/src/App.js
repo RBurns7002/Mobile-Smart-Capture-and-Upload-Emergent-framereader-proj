@@ -62,6 +62,9 @@ function App() {
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [showBenchmarkResults, setShowBenchmarkResults] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showMobileCapture, setShowMobileCapture] = useState(false);
+  const [mobileSession, setMobileSession] = useState(null);
+  const [mobileSessionStatus, setMobileSessionStatus] = useState(null);
   const fileInputRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const benchmarkPollRef = useRef(null);
