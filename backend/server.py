@@ -68,8 +68,8 @@ class JobResponse(BaseModel):
 # In-memory job storage for quick access
 jobs_cache = {}
 
-async def extract_frames_from_video(video_path: str, interval: float) -> List[tuple]:
-    """Extract frames from video at specified interval."""
+async def extract_frames_from_video(video_path: str, interval: float, crop: dict = None) -> List[tuple]:
+    """Extract frames from video at specified interval with optional cropping."""
     frames = []
     cap = cv2.VideoCapture(video_path)
     
@@ -83,6 +83,12 @@ async def extract_frames_from_video(video_path: str, interval: float) -> List[tu
     frame_step = int(fps * interval) if fps > 0 else 1
     frame_step = max(1, frame_step)
     
+    # Default crop values (percentages)
+    crop_top = crop.get('top', 0) if crop else 0
+    crop_bottom = crop.get('bottom', 0) if crop else 0
+    crop_left = crop.get('left', 0) if crop else 0
+    crop_right = crop.get('right', 0) if crop else 0
+    
     frame_index = 0
     while True:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
@@ -92,6 +98,17 @@ async def extract_frames_from_video(video_path: str, interval: float) -> List[tu
             break
         
         timestamp = frame_index / fps if fps > 0 else frame_index
+        
+        # Apply cropping based on percentages
+        h, w = frame.shape[:2]
+        y1 = int(h * crop_top / 100)
+        y2 = int(h * (100 - crop_bottom) / 100)
+        x1 = int(w * crop_left / 100)
+        x2 = int(w * (100 - crop_right) / 100)
+        
+        # Ensure valid crop region
+        if y2 > y1 and x2 > x1:
+            frame = frame[y1:y2, x1:x2]
         
         # Convert BGR to RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -142,7 +159,7 @@ async def ocr_frame(base64_image: str, api_key: str) -> str:
         logging.error(f"OCR error: {str(e)}")
         return f"[OCR Error: {str(e)}]"
 
-async def process_video_job(job_id: str, video_path: str, interval: float):
+async def process_video_job(job_id: str, video_path: str, interval: float, crop: dict = None):
     """Background task to process video and extract text."""
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     if not api_key:
@@ -159,7 +176,7 @@ async def process_video_job(job_id: str, video_path: str, interval: float):
             {"$set": {"status": "extracting_frames"}}
         )
         
-        frames = await extract_frames_from_video(video_path, interval)
+        frames = await extract_frames_from_video(video_path, interval, crop)
         total_frames = len(frames)
         
         await db.ocr_jobs.update_one(
@@ -248,17 +265,32 @@ async def upload_video(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
+class CropSettings(BaseModel):
+    top: float = 0
+    bottom: float = 0
+    left: float = 0
+    right: float = 0
+
 @api_router.post("/process-video")
 async def process_video(
     background_tasks: BackgroundTasks,
     file_id: str,
     filename: str,
-    frame_interval: float = 1.0
+    frame_interval: float = 1.0,
+    crop_top: float = 0,
+    crop_bottom: float = 0,
+    crop_left: float = 0,
+    crop_right: float = 0
 ):
     """Start processing a video for OCR."""
     # Validate frame interval
     if frame_interval < 0.5 or frame_interval > 5.0:
         raise HTTPException(status_code=400, detail="Frame interval must be between 0.5 and 5.0 seconds")
+    
+    # Validate crop values
+    for val in [crop_top, crop_bottom, crop_left, crop_right]:
+        if val < 0 or val > 45:
+            raise HTTPException(status_code=400, detail="Crop values must be between 0 and 45%")
     
     # Find the video file
     video_path = None
@@ -271,6 +303,14 @@ async def process_video(
     if not video_path:
         raise HTTPException(status_code=404, detail="Video file not found")
     
+    # Crop settings
+    crop = {
+        "top": crop_top,
+        "bottom": crop_bottom,
+        "left": crop_left,
+        "right": crop_right
+    }
+    
     # Create job
     job_id = str(uuid.uuid4())
     job_doc = {
@@ -278,6 +318,7 @@ async def process_video(
         "file_id": file_id,
         "filename": filename,
         "frame_interval": frame_interval,
+        "crop": crop,
         "status": "queued",
         "progress": 0,
         "total_frames": 0,
@@ -289,7 +330,7 @@ async def process_video(
     await db.ocr_jobs.insert_one(job_doc)
     
     # Start background processing
-    background_tasks.add_task(process_video_job, job_id, video_path, frame_interval)
+    background_tasks.add_task(process_video_job, job_id, video_path, frame_interval, crop)
     
     return {"job_id": job_id, "status": "queued"}
 
