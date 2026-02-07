@@ -48,7 +48,7 @@ import MobileCapturePage from "@/MobileCapture";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-function App() {
+function Home() {
   const [videoFile, setVideoFile] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
