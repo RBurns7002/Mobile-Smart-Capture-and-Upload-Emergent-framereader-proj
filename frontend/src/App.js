@@ -650,7 +650,7 @@ function App() {
                 <Button
                   className="w-full btn-primary py-5 rounded-none"
                   onClick={handleProcess}
-                  disabled={!videoFile || isUploading || isProcessing}
+                  disabled={!videoFile || isUploading || isProcessing || isBenchmarking}
                   data-testid="process-button"
                 >
                   {isUploading ? (
@@ -671,6 +671,27 @@ function App() {
                   )}
                 </Button>
                 
+                {/* Benchmark Button */}
+                <Button
+                  variant="outline"
+                  className="w-full mt-2 py-4 rounded-none border-[#27272a] bg-transparent hover:bg-[#22c55e]/10 hover:border-[#22c55e]/50 font-mono text-xs"
+                  onClick={handleBenchmark}
+                  disabled={!videoFile || isUploading || isProcessing || isBenchmarking}
+                  data-testid="benchmark-button"
+                >
+                  {isBenchmarking ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      BENCHMARKING...
+                    </>
+                  ) : (
+                    <>
+                      <FlaskConical className="w-4 h-4 mr-2" />
+                      RUN BENCHMARK (CROP VS UNCROP)
+                    </>
+                  )}
+                </Button>
+                
                 {/* Progress */}
                 {currentJob && (currentJob.status === 'processing' || currentJob.status === 'extracting_frames') && (
                   <div className="mt-4">
@@ -679,6 +700,22 @@ function App() {
                       <span className="text-xs font-mono text-[#3b82f6]">{currentJob.progress}%</span>
                     </div>
                     <Progress value={currentJob.progress} className="h-1 rounded-none bg-[#27272a]" data-testid="progress-bar" />
+                  </div>
+                )}
+                
+                {/* Benchmark Progress */}
+                {benchmarkJob && (benchmarkJob.status === 'processing' || benchmarkJob.status === 'extracting_frames' || benchmarkJob.status === 'queued') && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-mono text-[#71717a]">
+                        <FlaskConical className="w-3 h-3 inline mr-1" />
+                        {benchmarkJob.status === 'queued' ? 'Queued...' : 
+                         benchmarkJob.status === 'extracting_frames' ? 'Extracting frames...' : 
+                         `Benchmarking (${benchmarkJob.progress}%)`}
+                      </span>
+                      <span className="text-xs font-mono text-[#22c55e]">{benchmarkJob.progress}%</span>
+                    </div>
+                    <Progress value={benchmarkJob.progress} className="h-1 rounded-none bg-[#27272a]" data-testid="benchmark-progress-bar" />
                   </div>
                 )}
               </div>
