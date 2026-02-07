@@ -31,6 +31,11 @@ import {
   Crop,
   ChevronDown,
   ChevronUp,
+  FlaskConical,
+  BarChart3,
+  Percent,
+  Type,
+  Diff,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -46,9 +51,13 @@ function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentJob, setCurrentJob] = useState(null);
+  const [benchmarkJob, setBenchmarkJob] = useState(null);
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [showBenchmarkResults, setShowBenchmarkResults] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   const pollIntervalRef = useRef(null);
+  const benchmarkPollRef = useRef(null);
 
   // Poll for job status
   useEffect(() => {
@@ -79,6 +88,37 @@ function App() {
       }
     };
   }, [currentJob?.id, currentJob?.status]);
+
+  // Poll for benchmark job status
+  useEffect(() => {
+    if (benchmarkJob && (benchmarkJob.status === "queued" || benchmarkJob.status === "processing" || benchmarkJob.status === "extracting_frames")) {
+      benchmarkPollRef.current = setInterval(async () => {
+        try {
+          const response = await axios.get(`${API}/benchmark/${benchmarkJob.id}`);
+          setBenchmarkJob(response.data);
+          
+          if (response.data.status === "completed") {
+            setIsBenchmarking(false);
+            setShowBenchmarkResults(true);
+            toast.success("Benchmark complete!", { description: "Compare results below" });
+            clearInterval(benchmarkPollRef.current);
+          } else if (response.data.status === "failed") {
+            setIsBenchmarking(false);
+            toast.error("Benchmark failed", { description: response.data.error });
+            clearInterval(benchmarkPollRef.current);
+          }
+        } catch (error) {
+          console.error("Failed to poll benchmark status:", error);
+        }
+      }, 1500);
+    }
+    
+    return () => {
+      if (benchmarkPollRef.current) {
+        clearInterval(benchmarkPollRef.current);
+      }
+    };
+  }, [benchmarkJob?.id, benchmarkJob?.status]);
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
@@ -243,12 +283,69 @@ function App() {
     setVideoPreview(null);
     setUploadedFile(null);
     setCurrentJob(null);
+    setBenchmarkJob(null);
+    setIsBenchmarking(false);
+    setShowBenchmarkResults(false);
     setIsProcessing(false);
     setIsUploading(false);
     setCropSettings({ top: 0, bottom: 0, left: 0, right: 0 });
     setShowCropSettings(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const handleBenchmark = async () => {
+    // Check if crop is set
+    if (cropSettings.top === 0 && cropSettings.bottom === 0 && cropSettings.left === 0 && cropSettings.right === 0) {
+      toast.error("Set crop values first", { description: "Benchmark compares cropped vs uncropped - please set crop margins" });
+      setShowCropSettings(true);
+      return;
+    }
+
+    let fileData = uploadedFile;
+    
+    if (!fileData) {
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', videoFile);
+        
+        const uploadResponse = await axios.post(`${API}/upload-video`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        fileData = uploadResponse.data;
+        setUploadedFile(fileData);
+      } catch (error) {
+        toast.error("Upload failed", { description: error.response?.data?.detail || "Failed to upload video" });
+        setIsUploading(false);
+        return;
+      }
+      setIsUploading(false);
+    }
+    
+    setIsBenchmarking(true);
+    setShowBenchmarkResults(false);
+    
+    try {
+      const response = await axios.post(`${API}/benchmark-video`, null, {
+        params: {
+          file_id: fileData.file_id,
+          filename: fileData.filename,
+          frame_interval: parseFloat(frameInterval),
+          crop_top: cropSettings.top,
+          crop_bottom: cropSettings.bottom,
+          crop_left: cropSettings.left,
+          crop_right: cropSettings.right
+        }
+      });
+      
+      setBenchmarkJob({ id: response.data.job_id, status: "queued", progress: 0 });
+      toast.info("Benchmark started", { description: "Processing uncropped and cropped versions..." });
+    } catch (error) {
+      setIsBenchmarking(false);
+      toast.error("Benchmark failed", { description: error.response?.data?.detail || "Failed to start benchmark" });
     }
   };
 
