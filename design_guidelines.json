@@ -1,0 +1,99 @@
+{
+  "identity": {
+    "persona": "E1",
+    "mission": "Create a 'Cyber-Swiss' utility tool that feels like a high-end developer console. Precision, speed, and clarity are paramount.",
+    "vibe": "Technical, Dark, Monospaced, High-Contrast"
+  },
+  "typography": {
+    "primary_font": "Inter, sans-serif",
+    "secondary_font": "JetBrains Mono, monospace",
+    "import_url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap",
+    "usage": {
+      "headings": "JetBrains Mono",
+      "body": "Inter",
+      "code": "JetBrains Mono",
+      "ui_labels": "JetBrains Mono"
+    }
+  },
+  "colors": {
+    "palette": {
+      "background": "#050505",
+      "surface": "#0A0A0A",
+      "surface_highlight": "#121212",
+      "border": "#27272A",
+      "primary": "#3B82F6",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#22C55E",
+      "secondary_foreground": "#000000",
+      "muted": "#71717A",
+      "accent": "#F59E0B",
+      "error": "#EF4444"
+    },
+    "theme": "dark",
+    "gradients": {
+      "subtle_glow": "radial-gradient(circle at center, rgba(59, 130, 246, 0.15) 0%, rgba(0, 0, 0, 0) 70%)"
+    }
+  },
+  "layout": {
+    "grid_system": "Bento Grid Mode B (High Density)",
+    "spacing": {
+      "container_padding": "p-6 md:p-8",
+      "gap": "gap-4 md:gap-6",
+      "internal_padding": "p-4"
+    },
+    "structure": {
+      "app_container": "min-h-screen bg-[#050505] text-white font-sans selection:bg-primary/30",
+      "main_grid": "grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-4rem)]",
+      "left_panel": "lg:col-span-7 flex flex-col gap-4",
+      "right_panel": "lg:col-span-5 flex flex-col gap-4 h-full border-l border-border/50 pl-6"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary hover:bg-primary/90 text-white font-mono text-sm uppercase tracking-wider rounded-none border border-primary/50 shadow-[0_0_10px_rgba(59,130,246,0.3)] transition-all active:scale-95",
+      "secondary": "bg-transparent hover:bg-white/5 text-white font-mono text-sm uppercase tracking-wider rounded-none border border-white/20 transition-all",
+      "icon": "p-2 hover:bg-white/10 rounded-none transition-colors"
+    },
+    "inputs": {
+      "base": "bg-surface border border-border rounded-none focus:ring-1 focus:ring-primary focus:border-primary font-mono text-sm placeholder:text-muted",
+      "file_dropzone": "border-2 border-dashed border-border hover:border-primary/50 bg-surface/50 transition-colors cursor-pointer flex flex-col items-center justify-center gap-4 p-12 group relative overflow-hidden"
+    },
+    "panels": {
+      "card": "bg-surface border border-border rounded-none p-0 overflow-hidden relative",
+      "terminal": "bg-[#0A0A0A] border border-border font-mono text-sm p-4 overflow-y-auto custom-scrollbar"
+    },
+    "visual_enhancers": {
+      "scanline": "pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-50 bg-[length:100%_2px,3px_100%] opacity-20",
+      "noise_overlay": "fixed inset-0 z-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-[url('https://images.unsplash.com/photo-1764263996369-141150443ebf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRpZ2l0YWwlMjBub2lzZSUyMHRleHR1cmUlMjBkYXJrfGVufDB8fHx8MTc3MDQ5MzAyNXww&ixlib=rb-4.1.0&q=85')]"
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "background_texture",
+        "url": "https://images.unsplash.com/photo-1764263996369-141150443ebf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRpZ2l0YWwlMjBub2lzZSUyMHRleHR1cmUlMjBkYXJrfGVufDB8fHx8MTc3MDQ5MzAyNXww&ixlib=rb-4.1.0&q=85",
+        "description": "Subtle noise texture for background overlay"
+      }
+    ],
+    "icons": "lucide-react"
+  },
+  "instructions_to_main_agent": [
+    "1. IMPORT FONTS: Add the Google Fonts import link to the <head> of index.html or import in index.css immediately.",
+    "2. GLOBAL STYLES: Apply the 'noise_overlay' to the body to give a subtle texture.",
+    "3. LAYOUT: Implement the Split-Screen Bento Grid. Left side for Video Upload/Preview, Right side for Transcript/Output.",
+    "4. COMPONENT OVERRIDES: Customize Shadcn components to remove rounded corners (rounded-none) and use borders to create a 'technical' look.",
+    "5. TERMINAL LOOK: The transcript area should look like a code editor or terminal log. Use JetBrains Mono, line numbers (optional), and high contrast text.",
+    "6. PROGRESS: When processing, show a 'scanning' animation or a progress bar that looks like a system loader.",
+    "7. NO ROUNDED CORNERS: This is a precision tool. Avoid rounded-lg or rounded-xl. Stick to rounded-none or rounded-sm max.",
+    "8. DATA-TESTID: Add data-testid to all interactive elements (buttons, inputs, dropzones)."
+  ],
+  "universal_guidelines": [
+    "Do not use generic centered layouts.",
+    "Create depth through layered design elements (z-index).",
+    "Use glass-morphism effects sparingly, prefer solid high-contrast panels for this utility.",
+    "Every interaction needs micro-animations (hover states, transitions).",
+    "Use 2-3x more spacing than feels comfortable inside containers.",
+    "Never use AI assistant Emoji characters.",
+    "Use 'sonner' for toasts."
+  ]
+}
