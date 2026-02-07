@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import {
   Upload,
   Play,
@@ -27,6 +28,9 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  Crop,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -37,6 +41,8 @@ function App() {
   const [videoPreview, setVideoPreview] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [frameInterval, setFrameInterval] = useState("1.0");
+  const [cropSettings, setCropSettings] = useState({ top: 0, bottom: 0, left: 0, right: 0 });
+  const [showCropSettings, setShowCropSettings] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentJob, setCurrentJob] = useState(null);
@@ -149,7 +155,11 @@ function App() {
         params: {
           file_id: uploadedFile.file_id,
           filename: uploadedFile.filename,
-          frame_interval: parseFloat(frameInterval)
+          frame_interval: parseFloat(frameInterval),
+          crop_top: cropSettings.top,
+          crop_bottom: cropSettings.bottom,
+          crop_left: cropSettings.left,
+          crop_right: cropSettings.right
         }
       });
       
@@ -180,7 +190,11 @@ function App() {
           params: {
             file_id: uploadResponse.data.file_id,
             filename: uploadResponse.data.filename,
-            frame_interval: parseFloat(frameInterval)
+            frame_interval: parseFloat(frameInterval),
+            crop_top: cropSettings.top,
+            crop_bottom: cropSettings.bottom,
+            crop_left: cropSettings.left,
+            crop_right: cropSettings.right
           }
         });
         
@@ -231,6 +245,8 @@ function App() {
     setCurrentJob(null);
     setIsProcessing(false);
     setIsUploading(false);
+    setCropSettings({ top: 0, bottom: 0, left: 0, right: 0 });
+    setShowCropSettings(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -347,12 +363,56 @@ function App() {
                   </div>
                 ) : (
                   <div className="h-full flex flex-col gap-4">
-                    <video
-                      src={videoPreview}
-                      controls
-                      className="video-preview w-full flex-1 bg-black"
-                      data-testid="video-preview"
-                    />
+                    {/* Video with crop overlay */}
+                    <div className="relative flex-1 bg-black">
+                      <video
+                        src={videoPreview}
+                        controls
+                        className="video-preview w-full h-full object-contain"
+                        data-testid="video-preview"
+                      />
+                      {/* Crop overlay visualization */}
+                      {(cropSettings.top > 0 || cropSettings.bottom > 0 || cropSettings.left > 0 || cropSettings.right > 0) && (
+                        <div className="absolute inset-0 pointer-events-none">
+                          {/* Top crop overlay */}
+                          {cropSettings.top > 0 && (
+                            <div 
+                              className="absolute top-0 left-0 right-0 bg-black/70 border-b border-[#ef4444]/50"
+                              style={{ height: `${cropSettings.top}%` }}
+                            />
+                          )}
+                          {/* Bottom crop overlay */}
+                          {cropSettings.bottom > 0 && (
+                            <div 
+                              className="absolute bottom-0 left-0 right-0 bg-black/70 border-t border-[#ef4444]/50"
+                              style={{ height: `${cropSettings.bottom}%` }}
+                            />
+                          )}
+                          {/* Left crop overlay */}
+                          {cropSettings.left > 0 && (
+                            <div 
+                              className="absolute left-0 bg-black/70 border-r border-[#ef4444]/50"
+                              style={{ 
+                                width: `${cropSettings.left}%`,
+                                top: `${cropSettings.top}%`,
+                                bottom: `${cropSettings.bottom}%`
+                              }}
+                            />
+                          )}
+                          {/* Right crop overlay */}
+                          {cropSettings.right > 0 && (
+                            <div 
+                              className="absolute right-0 bg-black/70 border-l border-[#ef4444]/50"
+                              style={{ 
+                                width: `${cropSettings.right}%`,
+                                top: `${cropSettings.top}%`,
+                                bottom: `${cropSettings.bottom}%`
+                              }}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </div>
                     
                     <div className="flex items-center justify-between text-xs text-[#71717a] font-mono px-1">
                       <span>{videoFile?.name}</span>
@@ -389,6 +449,106 @@ function App() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Crop Settings Toggle */}
+                <button
+                  onClick={() => setShowCropSettings(!showCropSettings)}
+                  className="w-full flex items-center justify-between py-3 mb-4 border-y border-[#27272a] text-sm font-mono text-[#71717a] hover:text-white transition-colors"
+                  data-testid="crop-settings-toggle"
+                >
+                  <div className="flex items-center gap-2">
+                    <Crop className="w-4 h-4" />
+                    <span>Frame Crop</span>
+                    {(cropSettings.top > 0 || cropSettings.bottom > 0 || cropSettings.left > 0 || cropSettings.right > 0) && (
+                      <span className="text-[10px] px-2 py-0.5 bg-[#3b82f6]/20 text-[#3b82f6] border border-[#3b82f6]/30">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  {showCropSettings ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+                
+                {/* Crop Controls */}
+                {showCropSettings && (
+                  <div className="mb-4 p-4 bg-[#050505] border border-[#27272a] space-y-4" data-testid="crop-controls">
+                    <p className="text-xs text-[#71717a] font-mono mb-3">Adjust margins to crop the observable frame area (0-45%)</p>
+                    
+                    {/* Top Crop */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono text-[#71717a]">TOP</span>
+                        <span className="text-xs font-mono text-[#3b82f6]">{cropSettings.top}%</span>
+                      </div>
+                      <Slider
+                        value={[cropSettings.top]}
+                        onValueChange={([val]) => setCropSettings(prev => ({ ...prev, top: val }))}
+                        max={45}
+                        step={1}
+                        className="w-full"
+                        data-testid="crop-top-slider"
+                      />
+                    </div>
+                    
+                    {/* Bottom Crop */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono text-[#71717a]">BOTTOM</span>
+                        <span className="text-xs font-mono text-[#3b82f6]">{cropSettings.bottom}%</span>
+                      </div>
+                      <Slider
+                        value={[cropSettings.bottom]}
+                        onValueChange={([val]) => setCropSettings(prev => ({ ...prev, bottom: val }))}
+                        max={45}
+                        step={1}
+                        className="w-full"
+                        data-testid="crop-bottom-slider"
+                      />
+                    </div>
+                    
+                    {/* Left Crop */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono text-[#71717a]">LEFT</span>
+                        <span className="text-xs font-mono text-[#3b82f6]">{cropSettings.left}%</span>
+                      </div>
+                      <Slider
+                        value={[cropSettings.left]}
+                        onValueChange={([val]) => setCropSettings(prev => ({ ...prev, left: val }))}
+                        max={45}
+                        step={1}
+                        className="w-full"
+                        data-testid="crop-left-slider"
+                      />
+                    </div>
+                    
+                    {/* Right Crop */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono text-[#71717a]">RIGHT</span>
+                        <span className="text-xs font-mono text-[#3b82f6]">{cropSettings.right}%</span>
+                      </div>
+                      <Slider
+                        value={[cropSettings.right]}
+                        onValueChange={([val]) => setCropSettings(prev => ({ ...prev, right: val }))}
+                        max={45}
+                        step={1}
+                        className="w-full"
+                        data-testid="crop-right-slider"
+                      />
+                    </div>
+                    
+                    {/* Reset Crop */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCropSettings({ top: 0, bottom: 0, left: 0, right: 0 })}
+                      className="w-full mt-2 text-xs font-mono text-[#71717a] hover:text-white hover:bg-white/5"
+                      data-testid="reset-crop-button"
+                    >
+                      RESET CROP
+                    </Button>
+                  </div>
+                )}
                 
                 <Button
                   className="w-full btn-primary py-5 rounded-none"
