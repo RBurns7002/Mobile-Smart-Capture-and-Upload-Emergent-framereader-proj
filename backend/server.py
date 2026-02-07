@@ -71,6 +71,29 @@ class JobResponse(BaseModel):
 # In-memory job storage for quick access
 jobs_cache = {}
 
+# Mobile capture sessions
+mobile_sessions = {}
+
+class MobileCaptureSession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    session_id: str
+    session_code: str  # 6-digit code for pairing
+    status: str = "waiting"  # waiting, connected, capturing, completed
+    settings: dict = {}
+    frames: List[dict] = []
+    created_at: str
+    device_info: Optional[dict] = None
+
+class MobileCaptureSettings(BaseModel):
+    scroll_distance_percent: float = 80  # % of viewport to scroll
+    capture_interval_ms: int = 1500  # ms between captures
+    overlap_margin_percent: float = 10  # % overlap between captures
+    auto_detect_height: bool = True
+    screen_width: Optional[int] = None
+    screen_height: Optional[int] = None
+    estimated_content_height: Optional[int] = None
+    total_captures_estimate: Optional[int] = None
+
 async def extract_frames_from_video(video_path: str, interval: float, crop: dict = None) -> List[tuple]:
     """Extract frames from video at specified interval with optional cropping."""
     frames = []
