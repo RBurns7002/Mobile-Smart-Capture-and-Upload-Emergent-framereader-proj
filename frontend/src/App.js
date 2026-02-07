@@ -1266,4 +1266,15 @@ function App() {
   );
 }
 
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/mobile/capture/:sessionCode" element={<MobileCapturePage />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
 export default App;
