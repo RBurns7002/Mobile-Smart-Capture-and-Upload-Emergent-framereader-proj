@@ -724,6 +724,109 @@ function App() {
           
           {/* Right Panel - Transcript Output */}
           <div className="lg:col-span-5 flex flex-col lg:border-l lg:border-[#27272a]/50 lg:pl-6">
+            
+            {/* Benchmark Results Panel */}
+            {showBenchmarkResults && benchmarkJob?.comparison && (
+              <div className="panel mb-4" data-testid="benchmark-results">
+                <div className="panel-header flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-[#22c55e]" />
+                    <span className="font-mono text-sm">BENCHMARK RESULTS</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowBenchmarkResults(false)}
+                    className="h-6 px-2 text-[#71717a] hover:text-white hover:bg-white/5 text-xs"
+                  >
+                    HIDE
+                  </Button>
+                </div>
+                
+                <div className="p-4 space-y-4">
+                  {/* Similarity Score */}
+                  <div className="flex items-center justify-between p-3 bg-[#050505] border border-[#27272a]">
+                    <div className="flex items-center gap-2">
+                      <Percent className="w-4 h-4 text-[#3b82f6]" />
+                      <span className="font-mono text-sm">Similarity</span>
+                    </div>
+                    <span className={`font-mono text-lg font-medium ${
+                      benchmarkJob.comparison.similarity_percentage >= 90 ? 'text-[#22c55e]' :
+                      benchmarkJob.comparison.similarity_percentage >= 70 ? 'text-[#f59e0b]' :
+                      'text-[#ef4444]'
+                    }`}>
+                      {benchmarkJob.comparison.similarity_percentage}%
+                    </span>
+                  </div>
+                  
+                  {/* Character Counts */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-3 bg-[#050505] border border-[#27272a]">
+                      <div className="text-[10px] text-[#71717a] font-mono mb-1">UNCROPPED CHARS</div>
+                      <div className="font-mono text-sm text-white">{benchmarkJob.comparison.uncropped_char_count.toLocaleString()}</div>
+                    </div>
+                    <div className="p-3 bg-[#050505] border border-[#27272a]">
+                      <div className="text-[10px] text-[#71717a] font-mono mb-1">CROPPED CHARS</div>
+                      <div className="font-mono text-sm text-white">{benchmarkJob.comparison.cropped_char_count.toLocaleString()}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Extra Artifacts */}
+                  <div className="p-3 bg-[#050505] border border-[#27272a]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Type className="w-3 h-3 text-[#f59e0b]" />
+                      <span className="text-[10px] text-[#71717a] font-mono">EXTRA WORDS IN UNCROPPED (ARTIFACTS)</span>
+                    </div>
+                    <div className="font-mono text-lg text-[#f59e0b] mb-2">
+                      +{benchmarkJob.comparison.extra_words_in_uncropped} words
+                    </div>
+                    {benchmarkJob.comparison.extra_artifacts?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scrollbar">
+                        {benchmarkJob.comparison.extra_artifacts.slice(0, 20).map((word, idx) => (
+                          <span key={idx} className="text-[10px] px-1.5 py-0.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 font-mono">
+                            {word}
+                          </span>
+                        ))}
+                        {benchmarkJob.comparison.extra_artifacts.length > 20 && (
+                          <span className="text-[10px] text-[#71717a] font-mono">+{benchmarkJob.comparison.extra_artifacts.length - 20} more</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Lines only in uncropped */}
+                  {benchmarkJob.comparison.lines_only_in_uncropped?.length > 0 && (
+                    <div className="p-3 bg-[#050505] border border-[#27272a]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Diff className="w-3 h-3 text-[#ef4444]" />
+                        <span className="text-[10px] text-[#71717a] font-mono">LINES ONLY IN UNCROPPED</span>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                        {benchmarkJob.comparison.lines_only_in_uncropped.slice(0, 10).map((line, idx) => (
+                          <div key={idx} className="text-xs font-mono text-[#ef4444]/80 bg-[#ef4444]/5 px-2 py-1 border-l-2 border-[#ef4444]/30">
+                            {line || '(empty line)'}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Summary */}
+                  <div className="p-3 bg-[#22c55e]/10 border border-[#22c55e]/20">
+                    <div className="text-xs font-mono text-[#22c55e]">
+                      {benchmarkJob.comparison.char_difference > 0 ? (
+                        <>Cropping removed {benchmarkJob.comparison.char_difference.toLocaleString()} characters of potential noise</>
+                      ) : benchmarkJob.comparison.char_difference < 0 ? (
+                        <>Cropping captured {Math.abs(benchmarkJob.comparison.char_difference).toLocaleString()} more characters</>
+                      ) : (
+                        <>Both versions captured the same amount of text</>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="panel flex-1 flex flex-col">
               <div className="panel-header flex items-center justify-between">
                 <div className="flex items-center gap-2">
