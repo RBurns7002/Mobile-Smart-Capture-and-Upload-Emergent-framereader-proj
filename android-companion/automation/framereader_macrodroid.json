@@ -1,0 +1,176 @@
+{
+  "macroName": "FrameReader Auto Capture",
+  "macroGuid": "framereader-capture-001",
+  "triggers": [
+    {
+      "triggerType": "FloatingButton",
+      "config": {
+        "buttonIcon": "ic_camera",
+        "buttonColor": "#22c55e",
+        "buttonSize": "medium"
+      }
+    },
+    {
+      "triggerType": "ShortcutLaunched",
+      "config": {
+        "shortcutName": "FrameReader Capture"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "session_code",
+        "variableValue": "ENTER_SESSION_CODE_HERE"
+      }
+    },
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "api_url",
+        "variableValue": "https://framereader.preview.emergentagent.com/api"
+      }
+    },
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "scroll_px",
+        "variableValue": "800"
+      }
+    },
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "interval_sec",
+        "variableValue": "1.5"
+      }
+    },
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "total_captures",
+        "variableValue": "10"
+      }
+    },
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "screen_width",
+        "variableValue": "{device_width}"
+      }
+    },
+    {
+      "actionType": "SetVariable",
+      "config": {
+        "variableName": "screen_height",
+        "variableValue": "{device_height}"
+      }
+    },
+    {
+      "actionType": "HttpRequest",
+      "config": {
+        "method": "POST",
+        "url": "{api_url}/mobile/connect/{session_code}",
+        "contentType": "application/json",
+        "body": "{\"userAgent\":\"MacroDroid-Android\",\"screenWidth\":{screen_width},\"screenHeight\":{screen_height}}",
+        "saveResponseTo": "connect_response"
+      }
+    },
+    {
+      "actionType": "Toast",
+      "config": {
+        "message": "FrameReader: Starting capture in 3 seconds...",
+        "duration": "short"
+      }
+    },
+    {
+      "actionType": "Wait",
+      "config": {
+        "seconds": 3
+      }
+    },
+    {
+      "actionType": "Loop",
+      "config": {
+        "loopVariable": "i",
+        "startValue": 1,
+        "endValue": "{total_captures}",
+        "stepValue": 1,
+        "actions": [
+          {
+            "actionType": "TakeScreenshot",
+            "config": {
+              "savePath": "/sdcard/DCIM/framereader/frame_{i}.png"
+            }
+          },
+          {
+            "actionType": "Wait",
+            "config": {
+              "milliseconds": 500
+            }
+          },
+          {
+            "actionType": "ReadFileBase64",
+            "config": {
+              "filePath": "/sdcard/DCIM/framereader/frame_{i}.png",
+              "outputVariable": "image_base64"
+            }
+          },
+          {
+            "actionType": "HttpRequest",
+            "config": {
+              "method": "POST",
+              "url": "{api_url}/mobile/upload-batch/{session_code}",
+              "contentType": "application/json",
+              "body": "[{\"frame_index\":{i},\"scroll_position\":{i}*{scroll_px},\"image_base64\":\"{image_base64}\"}]",
+              "timeout": 60
+            }
+          },
+          {
+            "actionType": "UIInteraction",
+            "config": {
+              "interactionType": "swipe",
+              "startX": "50%",
+              "startY": "80%",
+              "endX": "50%",
+              "endY": "20%",
+              "duration": 300
+            }
+          },
+          {
+            "actionType": "Wait",
+            "config": {
+              "seconds": "{interval_sec}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "actionType": "HttpRequest",
+      "config": {
+        "method": "POST",
+        "url": "{api_url}/mobile/complete-capture/{session_code}",
+        "contentType": "application/json",
+        "body": "{}"
+      }
+    },
+    {
+      "actionType": "Toast",
+      "config": {
+        "message": "FrameReader: Capture complete! {total_captures} frames uploaded.",
+        "duration": "long"
+      }
+    },
+    {
+      "actionType": "DeleteFolder",
+      "config": {
+        "folderPath": "/sdcard/DCIM/framereader",
+        "recursive": true
+      }
+    }
+  ],
+  "constraints": [],
+  "enabled": true
+}
