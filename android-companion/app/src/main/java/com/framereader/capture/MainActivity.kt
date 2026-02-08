@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.View
+import android.view.WindowManager
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -33,6 +34,9 @@ class MainActivity : AppCompatActivity() {
     private var isCapturing = false
     private var captureJob: Job? = null
     
+    // Samsung S25 specific - track actual refresh rate
+    private var deviceRefreshRate = 60f
+    
     companion object {
         private const val REQUEST_CODE_SCREEN_CAPTURE = 1001
         private const val REQUEST_CODE_PERMISSIONS = 1002
@@ -43,6 +47,14 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        
+        // Samsung optimization: Keep screen on during capture setup
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        
+        // Get device refresh rate (Samsung S25 supports up to 120Hz)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            deviceRefreshRate = display?.refreshRate ?: 60f
+        }
         
         setupUI()
         detectScreenSize()
@@ -131,16 +143,40 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun detectScreenSize() {
-        val metrics = DisplayMetrics()
-        windowManager.defaultDisplay.getRealMetrics(metrics)
+        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.density
+        // Use modern API for Samsung S25 (Android 15)
+        val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            wm.currentWindowMetrics.bounds
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+            android.graphics.Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+        }
         
-        binding.screenInfoText.text = "Screen: ${width} × ${height}px (${density}x)"
+        val width = bounds.width()
+        val height = bounds.height()
         
-        // Calculate scroll pixels
+        // Get density
+        val density = resources.displayMetrics.density
+        
+        // Samsung S25 info: 6.2" Dynamic AMOLED 2X, 2340x1080
+        val deviceModel = Build.MODEL
+        val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
+        
+        val screenInfo = buildString {
+            append("$width × ${height}px")
+            if (isSamsung) append(" • Samsung")
+            if (deviceRefreshRate > 60) append(" • ${deviceRefreshRate.toInt()}Hz")
+        }
+        
+        binding.screenInfoText.text = screenInfo
+        
+        // Store for later use
+        FrameReaderApp.screenWidth = width
+        FrameReaderApp.screenHeight = height
+        
         updateScrollLabel()
     }
     
@@ -151,9 +187,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun updateScrollLabel() {
-        val metrics = DisplayMetrics()
-        windowManager.defaultDisplay.getRealMetrics(metrics)
-        val scrollPx = (metrics.heightPixels * FrameReaderApp.scrollDistancePercent / 100)
+        val scrollPx = (FrameReaderApp.screenHeight * FrameReaderApp.scrollDistancePercent / 100)
         binding.scrollLabel.text = "Scroll: ${FrameReaderApp.scrollDistancePercent}% (${scrollPx}px)"
     }
     
@@ -171,16 +205,19 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "Connecting..."
                 binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_orange_light))
                 
-                val metrics = DisplayMetrics()
-                windowManager.defaultDisplay.getRealMetrics(metrics)
-                
                 val deviceInfo = JSONObject().apply {
                     put("userAgent", "FrameReader-Android-App")
-                    put("screenWidth", metrics.widthPixels)
-                    put("screenHeight", metrics.heightPixels)
-                    put("pixelRatio", metrics.density)
+                    put("screenWidth", FrameReaderApp.screenWidth)
+                    put("screenHeight", FrameReaderApp.screenHeight)
+                    put("pixelRatio", resources.displayMetrics.density)
                     put("platform", "Android ${Build.VERSION.RELEASE}")
                     put("model", Build.MODEL)
+                    put("manufacturer", Build.MANUFACTURER)
+                    put("refreshRate", deviceRefreshRate)
+                    // Samsung-specific info
+                    if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+                        put("oneUiVersion", getOneUiVersion())
+                    }
                 }
                 
                 val request = Request.Builder()
@@ -208,6 +245,15 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "Error: ${e.message}"
                 binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_light))
             }
+        }
+    }
+    
+    private fun getOneUiVersion(): String {
+        return try {
+            val semPlatformInt = Build::class.java.getField("VERSION").get(null)
+            semPlatformInt?.toString() ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
         }
     }
     
