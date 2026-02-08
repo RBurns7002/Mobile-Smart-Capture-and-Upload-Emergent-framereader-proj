@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,43 +20,53 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+        
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: gradle-${{ runner.os }}-
         
     - name: Grant execute permission for gradlew
-      run: chmod +x android-companion/gradlew
-      working-directory: ${{ github.workspace }}
-      
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon
+      run: chmod +x gradlew
       working-directory: android-companion
       
-    - name: Build Release APK
-      run: ./gradlew assembleRelease --no-daemon
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon --stacktrace
       working-directory: android-companion
       
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: framereader-debug
+        name: framereader-debug-apk
         path: android-companion/app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 30
-        
-    - name: Upload Release APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: framereader-release
-        path: android-companion/app/build/outputs/apk/release/app-release-unsigned.apk
-        retention-days: 30
+        retention-days: 90
         
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ github.run_number }}
-        name: FrameReader Android v${{ github.run_number }}
-        files: |
-          android-companion/app/build/outputs/apk/debug/app-debug.apk
-          android-companion/app/build/outputs/apk/release/app-release-unsigned.apk
+        tag_name: v1.0.${{ github.run_number }}
+        name: FrameReader v1.0.${{ github.run_number }}
+        body: |
+          ## FrameReader Android Companion App
+          
+          ### Installation
+          1. Download `app-debug.apk` below
+          2. Transfer to your Android phone
+          3. Open the APK to install (enable "Install unknown apps" if prompted)
+          
+          ### Features
+          - Auto screen capture with scroll
+          - Direct upload to web app
+          - Optimized for Samsung Galaxy S25
+        files: android-companion/app/build/outputs/apk/debug/app-debug.apk
         draft: false
         prerelease: false
       env:
