@@ -635,27 +635,19 @@ async def connect_mobile_device(session_code: str, device_info: dict = None):
     }
 
 @api_router.post("/mobile/upload-frame/{session_code}")
-async def upload_mobile_frame(
-    session_code: str,
-    frame_index: int,
-    scroll_position: int = 0,
-    file: UploadFile = File(...)
-):
-    """Upload a single frame from mobile device."""
+async def upload_mobile_frame(session_code: str, body: dict):
+    """Upload a single frame from mobile device as JSON with base64 image."""
     session = await db.mobile_sessions.find_one({"session_code": session_code})
     if not session:
         raise HTTPException(status_code=404, detail="Invalid session code")
     
-    # Read and encode image
-    contents = await file.read()
-    base64_image = base64.b64encode(contents).decode('utf-8')
-    
+    image_base64 = body.get("image_base64", "")
     frame_data = {
-        "frame_index": frame_index,
-        "scroll_position": scroll_position,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "image_base64": base64_image,
-        "size": len(contents)
+        "frame_index": body.get("frame_index", 0),
+        "scroll_position": body.get("scroll_position", 0),
+        "timestamp": body.get("timestamp", datetime.now(timezone.utc).isoformat()),
+        "image_base64": image_base64,
+        "size": len(image_base64)
     }
     
     await db.mobile_sessions.update_one(
@@ -666,7 +658,7 @@ async def upload_mobile_frame(
         }
     )
     
-    return {"status": "uploaded", "frame_index": frame_index}
+    return {"status": "uploaded", "frame_index": frame_data["frame_index"]}
 
 @api_router.post("/mobile/upload-batch/{session_code}")
 async def upload_mobile_batch(session_code: str, frames: List[dict]):
