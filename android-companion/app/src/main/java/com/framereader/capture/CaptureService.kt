@@ -194,67 +194,63 @@ class CaptureService : Service() {
 
         val scroller = if (autoScroll) AutoScrollService.instance else null
         if (autoScroll && scroller == null) {
-            Log.w(TAG, "Auto-scroll requested but AccessibilityService not running. Capturing without scroll.")
+            Log.w(TAG, "Auto-scroll requested but AccessibilityService not running")
         }
 
         captureJob = scope.launch {
-            // Give user time to switch to the target app
-            updateNotification("Switch to target app! Capture starts in 4s...")
+            updateNotification("Switch to target app! Starting in 4s...")
             delay(4000)
+
+            // Upload frames in background without blocking the capture loop
+            val uploadJobs = mutableListOf<Job>()
 
             for (i in 1..totalCaptures) {
                 if (!isActive || !isRunning) break
 
-                val mode = if (scroller != null) "auto-scrolling" else "scroll manually"
-                updateNotification("Frame $i/$totalCaptures - $mode")
-                Log.d(TAG, "Capturing frame $i/$totalCaptures")
+                updateNotification("$i/$totalCaptures")
+                Log.d(TAG, "--- Frame $i/$totalCaptures ---")
 
-                // Capture the current screen
-                var bitmap: Bitmap? = null
-                for (attempt in 1..3) {
-                    delay(300)
-                    bitmap = captureScreen()
-                    if (bitmap != null) break
-                    Log.w(TAG, "Frame $i attempt $attempt: null, retrying...")
-                    delay(200)
-                }
+                // Wait briefly for the screen buffer to have current content
+                delay(150)
 
+                // Capture
+                val bitmap = captureScreen()
                 if (bitmap != null) {
                     capturedCount = i
-                    try {
-                        val base64 = bitmapToBase64(bitmap)
-                        bitmap.recycle()
+                    val base64 = bitmapToBase64(bitmap)
+                    bitmap.recycle()
+                    Log.d(TAG, "Frame $i captured (${base64.length / 1024}KB)")
 
-                        if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty()) {
+                    // Upload in background (don't block the loop)
+                    if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty()) {
+                        uploadJobs.add(scope.launch {
                             uploadFrame(apiUrl, sessionCode, i, base64)
-                        }
-                        Log.d(TAG, "Frame $i captured and uploaded")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Frame $i process/upload error: ${e.message}", e)
-                        bitmap.recycle()
+                        })
                     }
                 } else {
-                    Log.e(TAG, "Frame $i: failed after 3 attempts")
+                    Log.w(TAG, "Frame $i: null bitmap, skipping")
                 }
 
-                // Auto-scroll if available, then wait for content to settle
+                // Scroll + settle (only between frames, not after the last one)
                 if (i < totalCaptures && isActive && isRunning) {
                     if (scroller != null) {
-                        Log.d(TAG, "Auto-scrolling ${scrollPercent}%...")
-                        val scrolled = scroller.performScroll(scrollPercent)
-                        if (!scrolled) {
-                            Log.w(TAG, "Scroll gesture failed for frame $i")
-                        }
-                        // Wait for scroll animation to finish + content to render
-                        delay(intervalMs.coerceAtLeast(800))
+                        scroller.performScroll(scrollPercent)
+                        // Wait for scroll animation to finish and content to render
+                        delay(intervalMs)
                     } else {
+                        // Manual scroll mode: just wait the interval
                         delay(intervalMs)
                     }
                 }
             }
 
-            Log.d(TAG, "Capture loop done: $capturedCount/$totalCaptures")
-            updateNotification("Done! $capturedCount/$totalCaptures frames captured")
+            // Wait for all uploads to finish
+            Log.d(TAG, "Waiting for ${uploadJobs.size} uploads to complete...")
+            updateNotification("Uploading $capturedCount frames...")
+            uploadJobs.forEach { it.join() }
+
+            Log.d(TAG, "All done: $capturedCount/$totalCaptures")
+            updateNotification("Done! $capturedCount/$totalCaptures frames")
 
             if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty() && capturedCount > 0) {
                 completeSession(apiUrl, sessionCode)
