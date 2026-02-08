@@ -628,11 +628,66 @@ function Home() {
               
               {/* Instructions */}
               <div className="mt-4 space-y-2 text-[10px] text-[#71717a]">
-                <p>1. Open the URL on your Android phone</p>
-                <p>2. Follow the capture instructions</p>
-                <p>3. Upload screenshots when done</p>
-                <p className="text-[#f59e0b]">💡 For non-browser apps, use ADB automation</p>
+                <p>1. Open FrameReader app on your Android phone</p>
+                <p>2. Enter the session code and tap CONNECT</p>
+                <p>3. Enable auto-scroll and configure settings</p>
+                <p>4. Tap START CAPTURE, select "Entire screen", switch to target app</p>
               </div>
+              
+              {/* Process button when frames are captured */}
+              {mobileSessionStatus === 'captured' && (
+                <div className="mt-4 space-y-3">
+                  <Button
+                    onClick={async () => {
+                      try {
+                        setMobileSessionStatus('processing');
+                        await axios.post(`${API}/mobile/process/${mobileSession.session_code}`);
+                        // Resume polling for processing status
+                        mobilePollRef.current = setInterval(async () => {
+                          try {
+                            const response = await axios.get(`${API}/mobile/session/${mobileSession.session_id}`);
+                            const sessionData = response.data;
+                            setMobileSessionStatus(sessionData.status);
+                            if (sessionData.status === 'completed') {
+                              toast.success("Mobile capture processed!", { 
+                                description: `${sessionData.deduplicated_count || 0} unique text blocks extracted` 
+                              });
+                              if (sessionData.processed_transcripts?.length > 0) {
+                                setCurrentJob({
+                                  id: mobileSession.session_id,
+                                  status: 'completed',
+                                  transcripts: sessionData.processed_transcripts.map((t, i) => ({
+                                    ...t,
+                                    timestamp: i * 2,
+                                  })),
+                                  source: 'mobile'
+                                });
+                                setShowMobileCapture(false);
+                              }
+                              clearInterval(mobilePollRef.current);
+                            } else if (sessionData.status === 'failed') {
+                              toast.error("Processing failed", { description: sessionData.error });
+                              clearInterval(mobilePollRef.current);
+                            }
+                          } catch (err) {
+                            console.error("Poll error:", err);
+                          }
+                        }, 2000);
+                      } catch (err) {
+                        toast.error("Failed to start processing");
+                        setMobileSessionStatus('captured');
+                      }
+                    }}
+                    className="w-full h-12 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-mono"
+                    data-testid="process-mobile-frames-btn"
+                  >
+                    EXTRACT TEXT ({mobileSession?.frames_count || 0} FRAMES)
+                  </Button>
+                  <p className="text-[10px] text-[#71717a] font-mono text-center">
+                    Crop and benchmark features coming soon for mobile captures
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
