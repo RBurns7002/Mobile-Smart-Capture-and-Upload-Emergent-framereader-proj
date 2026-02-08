@@ -46,13 +46,31 @@ Create an app that takes a video that I record of my phone screen and is able to
 - ✅ Export to TXT + Copy to clipboard
 
 ## Android Companion Files (/app/android-companion/)
-- `README.md` - Setup instructions for all options
+
+### App Source Code
+- `app/src/main/java/com/framereader/capture/`
+  - `MainActivity.kt` - Main UI with session code input & settings
+  - `CaptureService.kt` - Screen capture via MediaProjection API
+  - `AutoScrollService.kt` - Accessibility service for cross-app scrolling
+  - `FrameReaderApp.kt` - Application class with settings
+- `app/src/main/res/layout/activity_main.xml` - Material Design UI
+- `app/src/main/AndroidManifest.xml` - Permissions & services
+
+### Automation Profiles
 - `automation/framereader_tasker.xml` - Tasker profile
 - `automation/framereader_macrodroid.json` - MacroDroid macro
-- `app/` - Full Android app source (Kotlin)
-  - MainActivity.kt - Main UI with settings
-  - CaptureService.kt - Screen capture via MediaProjection
-  - AutoScrollService.kt - Accessibility-based scrolling
+
+### Build System
+- `.github/workflows/build-apk.yml` - GitHub Actions auto-build
+- `build-apk.sh` - Local build script
+- `build.gradle` & `app/build.gradle` - Gradle config
+
+### Samsung Galaxy S25 Optimizations
+- 120Hz refresh rate detection
+- One UI 7 compatibility
+- Optimized JPEG compression (70%) for smaller uploads
+- Reduced capture density (320dpi) for efficiency
+- ~95% smaller data transfer vs video recording
 
 ## API Endpoints
 - `POST /api/upload-video` - Upload video file
