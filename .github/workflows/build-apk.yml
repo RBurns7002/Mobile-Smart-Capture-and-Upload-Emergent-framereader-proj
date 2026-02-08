@@ -58,15 +58,15 @@ jobs:
         unzip -t "$WRAPPER_JAR" | tail -1
 
     - name: Create consistent signing keystore
+      working-directory: android-companion
       run: |
-        KEYSTORE_PATH="$HOME/.android/debug.keystore"
+        KEYSTORE_PATH="release.keystore"
         if [ ! -f "$KEYSTORE_PATH" ]; then
-          mkdir -p "$HOME/.android"
           keytool -genkeypair -v \
             -keystore "$KEYSTORE_PATH" \
-            -alias androiddebugkey \
+            -alias framereader \
             -keyalg RSA -keysize 2048 -validity 36500 \
-            -storepass android -keypass android \
+            -storepass framereader123 -keypass framereader123 \
             -dname "CN=FrameReader,O=FrameReader,C=US"
         fi
 
@@ -74,15 +74,15 @@ jobs:
       run: chmod +x gradlew
       working-directory: android-companion
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon --stacktrace
+    - name: Build Release APK
+      run: ./gradlew assembleRelease --no-daemon --stacktrace
       working-directory: android-companion
 
-    - name: Upload Debug APK
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
-        name: framereader-debug-apk
-        path: android-companion/app/build/outputs/apk/debug/app-debug.apk
+        name: framereader-release-apk
+        path: android-companion/app/build/outputs/apk/release/app-release.apk
         retention-days: 90
 
     - name: Create Release
@@ -95,7 +95,7 @@ jobs:
           ## FrameReader Android Companion App
           
           ### Installation
-          1. Download `app-debug.apk` below
+          1. Download `app-release.apk` below
           2. Transfer to your Android phone
           3. Open the APK to install (enable "Install unknown apps" if prompted)
           
@@ -103,7 +103,7 @@ jobs:
           - Auto screen capture with scroll
           - Direct upload to web app
           - Optimized for Samsung Galaxy S25
-        files: android-companion/app/build/outputs/apk/debug/app-debug.apk
+        files: android-companion/app/build/outputs/apk/release/app-release.apk
         draft: false
         prerelease: false
       env:
