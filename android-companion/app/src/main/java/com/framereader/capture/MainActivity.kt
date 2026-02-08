@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.SeekBar
@@ -26,49 +27,68 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
-    
+
     private lateinit var binding: ActivityMainBinding
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private val client = OkHttpClient()
-    
+
     private var isCapturing = false
     private var captureJob: Job? = null
-    
-    // Samsung S25 specific - track actual refresh rate
+
     private var deviceRefreshRate = 60f
-    
+
     companion object {
+        private const val TAG = "FrameReader"
         private const val REQUEST_CODE_SCREEN_CAPTURE = 1001
         private const val REQUEST_CODE_PERMISSIONS = 1002
         private const val REQUEST_CODE_OVERLAY = 1003
+        private const val REQUEST_CODE_NOTIFICATIONS = 1004
     }
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        
-        // Samsung optimization: Keep screen on during capture setup
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        
-        // Get device refresh rate (Samsung S25 supports up to 120Hz)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            deviceRefreshRate = display?.refreshRate ?: 60f
+        try {
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
+
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                deviceRefreshRate = display?.refreshRate ?: 60f
+            }
+
+            requestNotificationPermission()
+            setupUI()
+            detectScreenSize()
+            handleDeepLink(intent)
+
+            Log.d(TAG, "App started successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onCreate: ${e.message}", e)
+            Toast.makeText(this, "Error starting app: ${e.message}", Toast.LENGTH_LONG).show()
         }
-        
-        setupUI()
-        detectScreenSize()
-        handleDeepLink(intent)
     }
-    
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_CODE_NOTIFICATIONS
+                )
+            }
+        }
+    }
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         intent?.let { handleDeepLink(it) }
     }
-    
+
     private fun handleDeepLink(intent: Intent) {
         intent.data?.let { uri ->
-            // Extract session code from URL like /mobile/capture/123456
             val pathSegments = uri.pathSegments
             if (pathSegments.size >= 3 && pathSegments[0] == "mobile" && pathSegments[1] == "capture") {
                 val code = pathSegments[2]
@@ -78,9 +98,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun setupUI() {
-        // Session code input
         binding.connectButton.setOnClickListener {
             val code = binding.sessionCodeInput.text.toString().trim()
             if (code.length == 6) {
@@ -90,8 +109,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Enter 6-digit session code", Toast.LENGTH_SHORT).show()
             }
         }
-        
-        // Scroll distance slider
+
         binding.scrollSlider.apply {
             progress = FrameReaderApp.scrollDistancePercent - 50
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -103,8 +121,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
         }
-        
-        // Interval slider
+
         binding.intervalSlider.apply {
             progress = ((FrameReaderApp.captureIntervalMs - 500) / 100).toInt()
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -116,8 +133,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
         }
-        
-        // Total captures slider
+
         binding.capturesSlider.apply {
             progress = (FrameReaderApp.totalCaptures - 5) / 5
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -129,8 +145,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
             })
         }
-        
-        // Start/Stop button
+
         binding.startButton.setOnClickListener {
             if (isCapturing) {
                 stopCapture()
@@ -138,73 +153,68 @@ class MainActivity : AppCompatActivity() {
                 checkPermissionsAndStart()
             }
         }
-        
+
         updateAllLabels()
     }
-    
+
     private fun detectScreenSize() {
-        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        
-        // Use modern API for Samsung S25 (Android 15)
-        val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            wm.currentWindowMetrics.bounds
-        } else {
-            val metrics = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            wm.defaultDisplay.getRealMetrics(metrics)
-            android.graphics.Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+        try {
+            val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+
+            val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                wm.currentWindowMetrics.bounds
+            } else {
+                val metrics = DisplayMetrics()
+                @Suppress("DEPRECATION")
+                wm.defaultDisplay.getRealMetrics(metrics)
+                android.graphics.Rect(0, 0, metrics.widthPixels, metrics.heightPixels)
+            }
+
+            val width = bounds.width()
+            val height = bounds.height()
+            val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
+
+            val screenInfo = buildString {
+                append("$width x ${height}px")
+                if (isSamsung) append(" | Samsung")
+                if (deviceRefreshRate > 60) append(" | ${deviceRefreshRate.toInt()}Hz")
+            }
+
+            binding.screenInfoText.text = screenInfo
+            FrameReaderApp.screenWidth = width
+            FrameReaderApp.screenHeight = height
+            updateScrollLabel()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error detecting screen size: ${e.message}", e)
+            binding.screenInfoText.text = "Screen: unknown"
         }
-        
-        val width = bounds.width()
-        val height = bounds.height()
-        
-        // Get density
-        val density = resources.displayMetrics.density
-        
-        // Samsung S25 info: 6.2" Dynamic AMOLED 2X, 2340x1080
-        val deviceModel = Build.MODEL
-        val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
-        
-        val screenInfo = buildString {
-            append("$width × ${height}px")
-            if (isSamsung) append(" • Samsung")
-            if (deviceRefreshRate > 60) append(" • ${deviceRefreshRate.toInt()}Hz")
-        }
-        
-        binding.screenInfoText.text = screenInfo
-        
-        // Store for later use
-        FrameReaderApp.screenWidth = width
-        FrameReaderApp.screenHeight = height
-        
-        updateScrollLabel()
     }
-    
+
     private fun updateAllLabels() {
         updateScrollLabel()
         updateIntervalLabel()
         updateCapturesLabel()
     }
-    
+
     private fun updateScrollLabel() {
         val scrollPx = (FrameReaderApp.screenHeight * FrameReaderApp.scrollDistancePercent / 100)
         binding.scrollLabel.text = "Scroll: ${FrameReaderApp.scrollDistancePercent}% (${scrollPx}px)"
     }
-    
+
     private fun updateIntervalLabel() {
         binding.intervalLabel.text = "Interval: ${FrameReaderApp.captureIntervalMs / 1000.0}s"
     }
-    
+
     private fun updateCapturesLabel() {
         binding.capturesLabel.text = "Captures: ${FrameReaderApp.totalCaptures}"
     }
-    
+
     private fun connectToSession() {
         scope.launch {
             try {
                 binding.statusText.text = "Connecting..."
                 binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_orange_light))
-                
+
                 val deviceInfo = JSONObject().apply {
                     put("userAgent", "FrameReader-Android-App")
                     put("screenWidth", FrameReaderApp.screenWidth)
@@ -214,65 +224,80 @@ class MainActivity : AppCompatActivity() {
                     put("model", Build.MODEL)
                     put("manufacturer", Build.MANUFACTURER)
                     put("refreshRate", deviceRefreshRate)
-                    // Samsung-specific info
-                    if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
-                        put("oneUiVersion", getOneUiVersion())
-                    }
                 }
-                
+
                 val request = Request.Builder()
                     .url("${FrameReaderApp.apiUrl}/mobile/connect/${FrameReaderApp.sessionCode}")
                     .post(deviceInfo.toString().toRequestBody("application/json".toMediaType()))
                     .build()
-                
+
                 withContext(Dispatchers.IO) {
                     client.newCall(request).execute().use { response ->
                         if (response.isSuccessful) {
                             runOnUiThread {
-                                binding.statusText.text = "Connected ✓"
+                                binding.statusText.text = "Connected"
                                 binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_green_light))
                                 binding.startButton.isEnabled = true
                             }
                         } else {
                             runOnUiThread {
-                                binding.statusText.text = "Connection failed"
+                                binding.statusText.text = "Connection failed (${response.code})"
                                 binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_light))
                             }
                         }
                     }
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Connection error: ${e.message}", e)
                 binding.statusText.text = "Error: ${e.message}"
                 binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_red_light))
             }
         }
     }
-    
-    private fun getOneUiVersion(): String {
-        return try {
-            val semPlatformInt = Build::class.java.getField("VERSION").get(null)
-            semPlatformInt?.toString() ?: "unknown"
-        } catch (e: Exception) {
-            "unknown"
-        }
-    }
-    
+
     private fun checkPermissionsAndStart() {
+        // Check notification permission first (required for foreground service on Android 13+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_CODE_NOTIFICATIONS
+                )
+                return
+            }
+        }
+
         // Check overlay permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Please enable 'Display over other apps' for FrameReader", Toast.LENGTH_LONG).show()
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             startActivityForResult(intent, REQUEST_CODE_OVERLAY)
             return
         }
-        
+
         // Request screen capture permission
         val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_CAPTURE)
     }
-    
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            REQUEST_CODE_NOTIFICATIONS -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "Notification permission granted")
+                } else {
+                    Toast.makeText(this, "Notifications needed for capture service", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        
+
         when (requestCode) {
             REQUEST_CODE_SCREEN_CAPTURE -> {
                 if (resultCode == Activity.RESULT_OK && data != null) {
@@ -288,7 +313,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun startCapture(resultCode: Int, data: Intent) {
         isCapturing = true
         binding.startButton.text = "STOP CAPTURE"
@@ -296,20 +321,18 @@ class MainActivity : AppCompatActivity() {
         binding.progressBar.visibility = View.VISIBLE
         binding.progressBar.max = FrameReaderApp.totalCaptures
         binding.progressBar.progress = 0
-        
-        // Start capture service
+
         val serviceIntent = Intent(this, CaptureService::class.java).apply {
             putExtra("resultCode", resultCode)
             putExtra("data", data)
         }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
         } else {
             startService(serviceIntent)
         }
-        
-        // Start auto-scroll service
+
         if (isAccessibilityServiceEnabled()) {
             startAutoScrollCapture()
         } else {
@@ -317,52 +340,49 @@ class MainActivity : AppCompatActivity() {
             openAccessibilitySettings()
         }
     }
-    
+
     private fun startAutoScrollCapture() {
         captureJob = scope.launch {
-            val metrics = DisplayMetrics()
-            windowManager.defaultDisplay.getRealMetrics(metrics)
-            val scrollPx = (metrics.heightPixels * FrameReaderApp.scrollDistancePercent / 100)
-            
+            val scrollPx = (FrameReaderApp.screenHeight * FrameReaderApp.scrollDistancePercent / 100)
+
             for (i in 1..FrameReaderApp.totalCaptures) {
                 if (!isCapturing) break
-                
-                // Trigger screenshot via service
+
                 sendBroadcast(Intent("com.framereader.CAPTURE_FRAME").apply {
+                    setPackage(packageName)
                     putExtra("frameIndex", i)
                     putExtra("scrollPosition", i * scrollPx)
                 })
-                
+
                 binding.progressBar.progress = i
                 binding.statusText.text = "Capturing $i/${FrameReaderApp.totalCaptures}"
-                
-                delay(200) // Wait for screenshot
-                
-                // Trigger scroll via accessibility service
+
+                delay(200)
+
                 sendBroadcast(Intent("com.framereader.SCROLL").apply {
+                    setPackage(packageName)
                     putExtra("scrollPx", scrollPx)
                 })
-                
+
                 delay(FrameReaderApp.captureIntervalMs)
             }
-            
-            // Complete capture
+
             completeCapture()
         }
     }
-    
+
     private fun stopCapture() {
         isCapturing = false
         captureJob?.cancel()
-        
+
         stopService(Intent(this, CaptureService::class.java))
-        
+
         binding.startButton.text = "START CAPTURE"
         binding.startButton.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
         binding.progressBar.visibility = View.GONE
         binding.statusText.text = "Stopped"
     }
-    
+
     private fun completeCapture() {
         scope.launch {
             try {
@@ -370,44 +390,43 @@ class MainActivity : AppCompatActivity() {
                     .url("${FrameReaderApp.apiUrl}/mobile/complete-capture/${FrameReaderApp.sessionCode}")
                     .post("{}".toRequestBody("application/json".toMediaType()))
                     .build()
-                
+
                 withContext(Dispatchers.IO) {
                     client.newCall(request).execute()
                 }
-                
+
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "Capture complete! Processing...", Toast.LENGTH_LONG).show()
                     stopCapture()
-                    binding.statusText.text = "Complete ✓"
+                    binding.statusText.text = "Complete"
                     binding.statusText.setTextColor(ContextCompat.getColor(this@MainActivity, android.R.color.holo_green_light))
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Upload failed: ${e.message}", e)
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
-    
+
     private fun isAccessibilityServiceEnabled(): Boolean {
         val accessibilityEnabled = Settings.Secure.getInt(
-            contentResolver,
-            Settings.Secure.ACCESSIBILITY_ENABLED, 0
+            contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0
         )
         if (accessibilityEnabled != 1) return false
-        
+
         val enabledServices = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        
+
         return enabledServices.contains(packageName)
     }
-    
+
     private fun openAccessibilitySettings() {
         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
