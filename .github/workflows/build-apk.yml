@@ -31,30 +31,24 @@ jobs:
       working-directory: android-companion
       run: |
         WRAPPER_JAR="gradle/wrapper/gradle-wrapper.jar"
-        WRAPPER_PROPS="gradle/wrapper/gradle-wrapper.properties"
-
-        # Read the Gradle distribution version from properties
-        DIST_URL=$(grep distributionUrl "$WRAPPER_PROPS" | sed 's/.*=//' | sed 's/\\:/:/g')
-        echo "Distribution URL: $DIST_URL"
 
         # Check if JAR exists and is a valid zip
-        if [ ! -f "$WRAPPER_JAR" ] || [ ! -s "$WRAPPER_JAR" ] || ! unzip -t "$WRAPPER_JAR" > /dev/null 2>&1; then
-          echo "Gradle wrapper JAR missing or corrupted. Downloading fresh copy..."
-          GRADLE_VERSION=$(echo "$DIST_URL" | grep -oP 'gradle-\K[0-9.]+')
-          echo "Detected Gradle version: $GRADLE_VERSION"
-          DOWNLOAD_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradle/wrapper/gradle-wrapper.jar"
-          echo "Trying: $DOWNLOAD_URL"
-          mkdir -p gradle/wrapper
-          curl -fsSL -o "$WRAPPER_JAR" "$DOWNLOAD_URL" || {
-            echo "Direct download failed. Using gradle init to generate wrapper..."
-            cd /tmp
-            gradle wrapper --gradle-version "$GRADLE_VERSION"
-            cp gradle/wrapper/gradle-wrapper.jar "$GITHUB_WORKSPACE/android-companion/$WRAPPER_JAR"
-            cd "$GITHUB_WORKSPACE/android-companion"
-          }
+        NEED_REGEN=false
+        if [ ! -f "$WRAPPER_JAR" ] || [ ! -s "$WRAPPER_JAR" ]; then
+          echo "Gradle wrapper JAR missing or empty."
+          NEED_REGEN=true
+        elif ! unzip -t "$WRAPPER_JAR" > /dev/null 2>&1; then
+          echo "Gradle wrapper JAR corrupted."
+          NEED_REGEN=true
         fi
 
-        echo "Verifying wrapper JAR..."
+        if [ "$NEED_REGEN" = true ]; then
+          echo "Regenerating Gradle wrapper using installed Gradle..."
+          gradle wrapper --gradle-version 8.2
+          echo "Wrapper regenerated."
+        fi
+
+        echo "Wrapper JAR details:"
         ls -la "$WRAPPER_JAR"
         unzip -t "$WRAPPER_JAR" | tail -1
 
