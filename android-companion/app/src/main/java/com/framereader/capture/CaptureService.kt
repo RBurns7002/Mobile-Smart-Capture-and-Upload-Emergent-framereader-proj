@@ -186,11 +186,16 @@ class CaptureService : Service() {
         Log.d(TAG, "VirtualDisplay created successfully")
     }
 
-    private fun startCaptureLoop(intervalMs: Long, totalCaptures: Int, sessionCode: String, apiUrl: String) {
+    private fun startCaptureLoop(intervalMs: Long, totalCaptures: Int, sessionCode: String, apiUrl: String, scrollPercent: Int, autoScroll: Boolean) {
         isRunning = true
         capturedCount = 0
         totalToCapture = totalCaptures
         lastError = null
+
+        val scroller = if (autoScroll) AutoScrollService.instance else null
+        if (autoScroll && scroller == null) {
+            Log.w(TAG, "Auto-scroll requested but AccessibilityService not running. Capturing without scroll.")
+        }
 
         captureJob = scope.launch {
             // Give user time to switch to the target app
@@ -200,13 +205,14 @@ class CaptureService : Service() {
             for (i in 1..totalCaptures) {
                 if (!isActive || !isRunning) break
 
-                updateNotification("Capturing $i/$totalCaptures - scroll now")
+                val mode = if (scroller != null) "auto-scrolling" else "scroll manually"
+                updateNotification("Frame $i/$totalCaptures - $mode")
                 Log.d(TAG, "Capturing frame $i/$totalCaptures")
 
-                // Try to capture with retries (virtual display may need a moment)
+                // Capture the current screen
                 var bitmap: Bitmap? = null
                 for (attempt in 1..3) {
-                    delay(300) // Let the buffer fill
+                    delay(300)
                     bitmap = captureScreen()
                     if (bitmap != null) break
                     Log.w(TAG, "Frame $i attempt $attempt: null, retrying...")
@@ -228,11 +234,22 @@ class CaptureService : Service() {
                         bitmap.recycle()
                     }
                 } else {
-                    Log.e(TAG, "Frame $i: failed to capture after 3 attempts")
+                    Log.e(TAG, "Frame $i: failed after 3 attempts")
                 }
 
+                // Auto-scroll if available, then wait for content to settle
                 if (i < totalCaptures && isActive && isRunning) {
-                    delay(intervalMs)
+                    if (scroller != null) {
+                        Log.d(TAG, "Auto-scrolling ${scrollPercent}%...")
+                        val scrolled = scroller.performScroll(scrollPercent)
+                        if (!scrolled) {
+                            Log.w(TAG, "Scroll gesture failed for frame $i")
+                        }
+                        // Wait for scroll animation to finish + content to render
+                        delay(intervalMs.coerceAtLeast(800))
+                    } else {
+                        delay(intervalMs)
+                    }
                 }
             }
 
