@@ -972,6 +972,24 @@ echo "Capture complete! Check web app for results."
         headers={"Content-Type": "application/json"}
     )
 
+@api_router.get("/mobile/download-info")
+async def get_download_info():
+    """Get Android app download information."""
+    return {
+        "apk_url": "https://github.com/nicozica/framereader-android/releases/latest/download/framereader-debug.apk",
+        "github_url": "https://github.com/nicozica/framereader-android",
+        "version": "1.0.0",
+        "min_android": "7.0 (API 24)",
+        "optimized_for": ["Samsung Galaxy S25", "Samsung Galaxy S24", "Pixel 8", "OnePlus 12"],
+        "features": [
+            "One-tap screen capture",
+            "Auto-scroll in any app",
+            "Direct upload to web app",
+            "70% smaller than video recording",
+            "120Hz display support"
+        ]
+    }
+
 class CropSettings(BaseModel):
     top: float = 0
     bottom: float = 0
