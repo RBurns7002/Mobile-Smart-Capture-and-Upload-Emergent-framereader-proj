@@ -2,92 +2,90 @@ package com.framereader.capture
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Path
 import android.os.Build
-import android.util.DisplayMetrics
-import android.view.WindowManager
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import kotlinx.coroutines.CompletableDeferred
 
 class AutoScrollService : AccessibilityService() {
-    
-    private val scrollReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                "com.framereader.SCROLL" -> {
-                    val scrollPx = intent.getIntExtra("scrollPx", 800)
-                    performScroll(scrollPx)
-                }
-            }
-        }
+
+    companion object {
+        private const val TAG = "FrameReaderScroll"
+
+        // Static reference so CaptureService can call scroll directly
+        var instance: AutoScrollService? = null
+            private set
     }
-    
+
     override fun onServiceConnected() {
         super.onServiceConnected()
-        
-        val filter = IntentFilter().apply {
-            addAction("com.framereader.SCROLL")
-        }
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(scrollReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(scrollReceiver, filter)
-        }
+        instance = this
+        Log.d(TAG, "AutoScrollService connected")
     }
-    
-    private fun performScroll(scrollPx: Int) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
-        
-        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        wm.defaultDisplay.getRealMetrics(metrics)
-        
-        val screenWidth = metrics.widthPixels
-        val screenHeight = metrics.heightPixels
-        
-        // Calculate swipe coordinates
+
+    /**
+     * Perform a scroll gesture and suspend until it completes.
+     * Returns true if the gesture was dispatched successfully.
+     */
+    suspend fun performScroll(scrollPercent: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+
+        val dm = resources.displayMetrics
+        val screenWidth = dm.widthPixels
+        val screenHeight = dm.heightPixels
+
+        // Scroll from ~80% down to (80% - scrollPercent%) up
         val startX = screenWidth / 2f
-        val startY = screenHeight * 0.8f
-        val endY = startY - scrollPx
-        
+        val startY = screenHeight * 0.80f
+        val scrollPx = screenHeight * scrollPercent / 100f
+        val endY = (startY - scrollPx).coerceAtLeast(screenHeight * 0.10f)
+
+        Log.d(TAG, "Scrolling: ($startX, $startY) -> ($startX, $endY) = ${scrollPx}px")
+
         val path = Path().apply {
             moveTo(startX, startY)
-            lineTo(startX, endY.coerceAtLeast(screenHeight * 0.1f))
+            lineTo(startX, endY)
         }
-        
+
+        // Duration of the swipe gesture (longer = more reliable scroll)
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 300))
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 400))
             .build()
-        
-        dispatchGesture(gesture, object : GestureResultCallback() {
+
+        val result = CompletableDeferred<Boolean>()
+
+        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
-                super.onCompleted(gestureDescription)
+                Log.d(TAG, "Scroll gesture completed")
+                result.complete(true)
             }
-            
+
             override fun onCancelled(gestureDescription: GestureDescription?) {
-                super.onCancelled(gestureDescription)
+                Log.w(TAG, "Scroll gesture cancelled")
+                result.complete(false)
             }
         }, null)
+
+        if (!dispatched) {
+            Log.e(TAG, "Failed to dispatch scroll gesture")
+            return false
+        }
+
+        return result.await()
     }
-    
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Not needed for our use case
+        // Not needed
     }
-    
+
     override fun onInterrupt() {
-        // Handle interruption
+        Log.d(TAG, "AutoScrollService interrupted")
     }
-    
+
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            unregisterReceiver(scrollReceiver)
-        } catch (e: Exception) {
-            // Receiver not registered
-        }
+        instance = null
+        Log.d(TAG, "AutoScrollService destroyed")
     }
 }
