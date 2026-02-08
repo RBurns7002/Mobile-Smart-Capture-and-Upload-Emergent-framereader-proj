@@ -20,6 +20,10 @@ class FrameReaderApp : Application() {
         var captureIntervalMs = 1500L
         var overlapMarginPercent = 10
         var totalCaptures = 10
+        
+        // Screen dimensions (detected at runtime)
+        var screenWidth = 1080
+        var screenHeight = 2340  // Samsung S25 default
     }
     
     override fun onCreate() {
