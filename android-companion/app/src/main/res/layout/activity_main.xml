@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#050505"
+    android:fillViewport="true">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="24dp"
-    android:background="#050505"
     tools:context=".MainActivity">
 
     <!-- Header -->
@@ -15,21 +20,21 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:layout_marginBottom="24dp">
-        
+
         <ImageView
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:src="@android:drawable/ic_menu_camera"
             android:padding="8dp"
             android:background="#1a3b82f6" />
-        
+
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
             android:layout_marginStart="12dp">
-            
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -38,7 +43,7 @@
                 android:textSize="18sp"
                 android:fontFamily="monospace"
                 android:textStyle="bold" />
-            
+
             <TextView
                 android:id="@+id/screenInfoText"
                 android:layout_width="wrap_content"
@@ -58,7 +63,7 @@
         android:background="#0a0a0a"
         android:padding="16dp"
         android:layout_marginBottom="16dp">
-        
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -67,12 +72,12 @@
             android:textSize="10sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="8dp" />
-        
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
-            
+
             <EditText
                 android:id="@+id/sessionCodeInput"
                 android:layout_width="0dp"
@@ -90,7 +95,7 @@
                 android:letterSpacing="0.3"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp" />
-            
+
             <Button
                 android:id="@+id/connectButton"
                 android:layout_width="wrap_content"
@@ -102,7 +107,7 @@
                 android:textSize="12sp"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
-        
+
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
@@ -115,7 +120,7 @@
             android:layout_marginTop="12dp" />
     </LinearLayout>
 
-    <!-- Settings -->
+    <!-- Auto-Scroll Section -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -123,7 +128,62 @@
         android:background="#0a0a0a"
         android:padding="16dp"
         android:layout_marginBottom="16dp">
-        
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AUTO-SCROLL"
+                    android:textColor="#22c55e"
+                    android:textSize="12sp"
+                    android:fontFamily="monospace" />
+
+                <TextView
+                    android:id="@+id/autoScrollStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Service: OFF"
+                    android:textColor="#ef4444"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/autoScrollSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Scrolls automatically in the target app. Requires one-time Accessibility setup."
+            android:textColor="#52525b"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:layout_marginTop="4dp" />
+    </LinearLayout>
+
+    <!-- Capture Settings -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#0a0a0a"
+        android:padding="16dp"
+        android:layout_marginBottom="16dp">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -132,7 +192,7 @@
             android:textSize="12sp"
             android:fontFamily="monospace"
             android:layout_marginBottom="16dp" />
-        
+
         <!-- Scroll Distance -->
         <TextView
             android:id="@+id/scrollLabel"
@@ -142,7 +202,7 @@
             android:textColor="#71717a"
             android:textSize="11sp"
             android:fontFamily="monospace" />
-        
+
         <SeekBar
             android:id="@+id/scrollSlider"
             android:layout_width="match_parent"
@@ -152,7 +212,7 @@
             android:progressTint="#3b82f6"
             android:thumbTint="#3b82f6"
             android:layout_marginBottom="16dp" />
-        
+
         <!-- Interval -->
         <TextView
             android:id="@+id/intervalLabel"
@@ -162,7 +222,7 @@
             android:textColor="#71717a"
             android:textSize="11sp"
             android:fontFamily="monospace" />
-        
+
         <SeekBar
             android:id="@+id/intervalSlider"
             android:layout_width="match_parent"
@@ -172,7 +232,7 @@
             android:progressTint="#3b82f6"
             android:thumbTint="#3b82f6"
             android:layout_marginBottom="16dp" />
-        
+
         <!-- Total Captures -->
         <TextView
             android:id="@+id/capturesLabel"
@@ -182,7 +242,7 @@
             android:textColor="#71717a"
             android:textSize="11sp"
             android:fontFamily="monospace" />
-        
+
         <SeekBar
             android:id="@+id/capturesSlider"
             android:layout_width="match_parent"
@@ -203,17 +263,11 @@
         android:progressTint="#22c55e"
         android:layout_marginBottom="16dp" />
 
-    <!-- Spacer -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
     <!-- Hint text -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="When prompted, select 'Entire screen' (not a single app). Then switch to the app you want to capture and scroll."
+        android:text="When prompted, select 'Entire screen'. Then switch to the app you want to capture."
         android:textColor="#a1a1aa"
         android:textSize="11sp"
         android:fontFamily="monospace"
@@ -235,3 +289,4 @@
         android:enabled="false" />
 
 </LinearLayout>
+</ScrollView>
