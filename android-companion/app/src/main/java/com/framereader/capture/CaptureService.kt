@@ -13,7 +13,9 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -32,6 +34,7 @@ class CaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
     private var captureJob: Job? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -40,6 +43,16 @@ class CaptureService : Service() {
         .build()
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Callback required by Android 14+ before createVirtualDisplay
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            Log.d(TAG, "MediaProjection stopped by system")
+            cleanupProjection()
+            isRunning = false
+            stopSelf()
+        }
+    }
 
     companion object {
         private const val TAG = "FrameReaderCapture"
@@ -63,13 +76,15 @@ class CaptureService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand called")
 
+        // Start foreground FIRST (required before any projection work)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, createNotification("Starting capture..."),
+                startForeground(NOTIFICATION_ID, createNotification("Preparing capture..."),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
             } else {
-                startForeground(NOTIFICATION_ID, createNotification("Starting capture..."))
+                startForeground(NOTIFICATION_ID, createNotification("Preparing capture..."))
             }
+            Log.d(TAG, "Foreground service started")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start foreground: ${e.message}", e)
             lastError = "Foreground service failed: ${e.message}"
@@ -78,7 +93,7 @@ class CaptureService : Service() {
         }
 
         val resultCode = intent?.getIntExtra("resultCode", Activity.RESULT_CANCELED)
-            ?: return START_NOT_STICKY
+            ?: run { stopSelf(); return START_NOT_STICKY }
 
         val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra("data", Intent::class.java)
@@ -87,7 +102,8 @@ class CaptureService : Service() {
             intent.getParcelableExtra("data")
         }
         if (data == null) {
-            Log.e(TAG, "No projection data received")
+            Log.e(TAG, "No projection data")
+            lastError = "No projection data received"
             stopSelf()
             return START_NOT_STICKY
         }
@@ -97,16 +113,18 @@ class CaptureService : Service() {
         val sessionCode = intent.getStringExtra("sessionCode") ?: ""
         val apiUrl = intent.getStringExtra("apiUrl") ?: ""
 
-        Log.d(TAG, "Starting capture: interval=${intervalMs}ms, total=$totalCaptures, session=$sessionCode")
+        Log.d(TAG, "Config: interval=${intervalMs}ms, total=$totalCaptures, session=$sessionCode")
 
-        if (!setupMediaProjection(resultCode, data)) {
+        try {
+            setupProjection(resultCode, data)
+            startCaptureLoop(intervalMs, totalCaptures, sessionCode, apiUrl)
+        } catch (e: Exception) {
+            Log.e(TAG, "Setup failed: ${e.message}", e)
+            lastError = "Setup failed: ${e.message}"
             stopSelf()
-            return START_NOT_STICKY
         }
 
-        startCaptureLoop(intervalMs, totalCaptures, sessionCode, apiUrl)
-
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun createNotification(text: String): Notification {
@@ -129,44 +147,41 @@ class CaptureService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIFICATION_ID, createNotification(text))
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(NOTIFICATION_ID, createNotification(text))
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update notification: ${e.message}")
+        }
     }
 
-    private fun setupMediaProjection(resultCode: Int, data: Intent): Boolean {
-        return try {
-            val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            mediaProjection = projectionManager.getMediaProjection(resultCode, data)
+    private fun setupProjection(resultCode: Int, data: Intent) {
+        val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        mediaProjection = projectionManager.getMediaProjection(resultCode, data)
+            ?: throw IllegalStateException("Failed to get MediaProjection")
 
-            if (mediaProjection == null) {
-                Log.e(TAG, "MediaProjection is null")
-                lastError = "Screen capture permission not granted"
-                return false
-            }
+        Log.d(TAG, "MediaProjection obtained")
 
-            val width = FrameReaderApp.screenWidth
-            val height = FrameReaderApp.screenHeight
-            val density = resources.displayMetrics.densityDpi
-            val captureDensity = minOf(density, 320)
+        // REQUIRED on Android 14+: register callback BEFORE createVirtualDisplay
+        mediaProjection!!.registerCallback(projectionCallback, handler)
+        Log.d(TAG, "Projection callback registered")
 
-            Log.d(TAG, "Setting up virtual display: ${width}x${height} @ $captureDensity dpi")
+        val width = FrameReaderApp.screenWidth
+        val height = FrameReaderApp.screenHeight
+        val density = resources.displayMetrics.densityDpi
 
-            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        Log.d(TAG, "Screen: ${width}x${height} @ ${density}dpi")
 
-            virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "FrameReader",
-                width, height, captureDensity,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface, null, null
-            )
+        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        Log.d(TAG, "ImageReader created")
 
-            Log.d(TAG, "Virtual display created successfully")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "setupMediaProjection failed: ${e.message}", e)
-            lastError = "Capture setup failed: ${e.message}"
-            false
-        }
+        virtualDisplay = mediaProjection!!.createVirtualDisplay(
+            "FrameReader",
+            width, height, density,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            imageReader!!.surface, null, handler
+        )
+        Log.d(TAG, "VirtualDisplay created successfully")
     }
 
     private fun startCaptureLoop(intervalMs: Long, totalCaptures: Int, sessionCode: String, apiUrl: String) {
@@ -176,50 +191,56 @@ class CaptureService : Service() {
         lastError = null
 
         captureJob = scope.launch {
-            // Initial delay to let user switch to target app
-            Log.d(TAG, "Waiting 3s for user to switch apps...")
-            updateNotification("Switch to your target app now! Starting in 3s...")
-            delay(3000)
+            // Give user time to switch to the target app
+            updateNotification("Switch to target app! Capture starts in 4s...")
+            delay(4000)
 
             for (i in 1..totalCaptures) {
-                if (!isActive) break
+                if (!isActive || !isRunning) break
 
-                Log.d(TAG, "Capturing frame $i/$totalCaptures")
                 updateNotification("Capturing $i/$totalCaptures - scroll now")
+                Log.d(TAG, "Capturing frame $i/$totalCaptures")
 
-                try {
-                    val bitmap = captureScreen()
-                    if (bitmap != null) {
-                        capturedCount = i
+                // Try to capture with retries (virtual display may need a moment)
+                var bitmap: Bitmap? = null
+                for (attempt in 1..3) {
+                    delay(300) // Let the buffer fill
+                    bitmap = captureScreen()
+                    if (bitmap != null) break
+                    Log.w(TAG, "Frame $i attempt $attempt: null, retrying...")
+                    delay(200)
+                }
+
+                if (bitmap != null) {
+                    capturedCount = i
+                    try {
                         val base64 = bitmapToBase64(bitmap)
                         bitmap.recycle()
 
                         if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty()) {
                             uploadFrame(apiUrl, sessionCode, i, base64)
                         }
-
                         Log.d(TAG, "Frame $i captured and uploaded")
-                    } else {
-                        Log.w(TAG, "Frame $i: null bitmap")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Frame $i process/upload error: ${e.message}", e)
+                        bitmap.recycle()
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Frame $i capture error: ${e.message}", e)
+                } else {
+                    Log.e(TAG, "Frame $i: failed to capture after 3 attempts")
                 }
 
-                if (i < totalCaptures) {
+                if (i < totalCaptures && isActive && isRunning) {
                     delay(intervalMs)
                 }
             }
 
-            // Complete
-            Log.d(TAG, "Capture complete: $capturedCount/$totalCaptures frames")
+            Log.d(TAG, "Capture loop done: $capturedCount/$totalCaptures")
             updateNotification("Done! $capturedCount/$totalCaptures frames captured")
 
-            if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty()) {
+            if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty() && capturedCount > 0) {
                 completeSession(apiUrl, sessionCode)
             }
 
-            // Notify MainActivity
             sendBroadcast(Intent("com.framereader.CAPTURE_COMPLETE").apply {
                 setPackage(packageName)
                 putExtra("capturedCount", capturedCount)
@@ -233,14 +254,14 @@ class CaptureService : Service() {
     }
 
     private fun captureScreen(): Bitmap? {
-        // Allow the ImageReader buffer to fill
-        Thread.sleep(200)
-
-        val image = imageReader?.acquireLatestImage() ?: return null
         return try {
-            imageToBitmap(image)
-        } finally {
+            val image = imageReader?.acquireLatestImage() ?: return null
+            val bitmap = imageToBitmap(image)
             image.close()
+            bitmap
+        } catch (e: Exception) {
+            Log.e(TAG, "captureScreen error: ${e.message}", e)
+            null
         }
     }
 
@@ -290,6 +311,8 @@ class CaptureService : Service() {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         Log.w(TAG, "Upload frame $frameIndex failed: ${response.code}")
+                    } else {
+                        Log.d(TAG, "Upload frame $frameIndex OK")
                     }
                 }
             } catch (e: Exception) {
@@ -307,12 +330,22 @@ class CaptureService : Service() {
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    Log.d(TAG, "Complete session response: ${response.code}")
+                    Log.d(TAG, "Complete session: ${response.code}")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Complete session error: ${e.message}", e)
             }
         }
+    }
+
+    private fun cleanupProjection() {
+        virtualDisplay?.release()
+        virtualDisplay = null
+        imageReader?.close()
+        imageReader = null
+        mediaProjection?.unregisterCallback(projectionCallback)
+        mediaProjection?.stop()
+        mediaProjection = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -323,8 +356,6 @@ class CaptureService : Service() {
         isRunning = false
         captureJob?.cancel()
         scope.cancel()
-        virtualDisplay?.release()
-        imageReader?.close()
-        mediaProjection?.stop()
+        cleanupProjection()
     }
 }
