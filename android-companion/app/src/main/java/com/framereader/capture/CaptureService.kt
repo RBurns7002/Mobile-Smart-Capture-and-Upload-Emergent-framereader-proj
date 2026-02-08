@@ -112,12 +112,14 @@ class CaptureService : Service() {
         val totalCaptures = intent.getIntExtra("totalCaptures", 10)
         val sessionCode = intent.getStringExtra("sessionCode") ?: ""
         val apiUrl = intent.getStringExtra("apiUrl") ?: ""
+        val scrollPercent = intent.getIntExtra("scrollPercent", 80)
+        val autoScroll = intent.getBooleanExtra("autoScroll", false)
 
-        Log.d(TAG, "Config: interval=${intervalMs}ms, total=$totalCaptures, session=$sessionCode")
+        Log.d(TAG, "Config: interval=${intervalMs}ms, total=$totalCaptures, scroll=${scrollPercent}%, autoScroll=$autoScroll, session=$sessionCode")
 
         try {
             setupProjection(resultCode, data)
-            startCaptureLoop(intervalMs, totalCaptures, sessionCode, apiUrl)
+            startCaptureLoop(intervalMs, totalCaptures, sessionCode, apiUrl, scrollPercent, autoScroll)
         } catch (e: Exception) {
             Log.e(TAG, "Setup failed: ${e.message}", e)
             lastError = "Setup failed: ${e.message}"
