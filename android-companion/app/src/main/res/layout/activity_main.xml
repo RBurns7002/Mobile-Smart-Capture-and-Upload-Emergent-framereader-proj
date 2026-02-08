@@ -209,6 +209,19 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <!-- Hint text -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="When prompted, select 'Entire screen' (not a single app). Then switch to the app you want to capture and scroll."
+        android:textColor="#a1a1aa"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:layout_marginBottom="12dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp" />
+
     <!-- Start Button -->
     <Button
         android:id="@+id/startButton"
