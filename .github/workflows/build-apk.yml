@@ -10,44 +10,69 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-        
-    - name: Cache Gradle packages
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: gradle-${{ runner.os }}-
-        
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: Ensure Gradle wrapper JAR exists
+      working-directory: android-companion
+      run: |
+        WRAPPER_JAR="gradle/wrapper/gradle-wrapper.jar"
+        WRAPPER_PROPS="gradle/wrapper/gradle-wrapper.properties"
+
+        # Read the Gradle distribution version from properties
+        DIST_URL=$(grep distributionUrl "$WRAPPER_PROPS" | sed 's/.*=//' | sed 's/\\:/:/g')
+        echo "Distribution URL: $DIST_URL"
+
+        # Check if JAR exists and is a valid zip
+        if [ ! -f "$WRAPPER_JAR" ] || [ ! -s "$WRAPPER_JAR" ] || ! unzip -t "$WRAPPER_JAR" > /dev/null 2>&1; then
+          echo "Gradle wrapper JAR missing or corrupted. Downloading fresh copy..."
+          GRADLE_VERSION=$(echo "$DIST_URL" | grep -oP 'gradle-\K[0-9.]+')
+          echo "Detected Gradle version: $GRADLE_VERSION"
+          DOWNLOAD_URL="https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradle/wrapper/gradle-wrapper.jar"
+          echo "Trying: $DOWNLOAD_URL"
+          mkdir -p gradle/wrapper
+          curl -fsSL -o "$WRAPPER_JAR" "$DOWNLOAD_URL" || {
+            echo "Direct download failed. Using gradle init to generate wrapper..."
+            cd /tmp
+            gradle wrapper --gradle-version "$GRADLE_VERSION"
+            cp gradle/wrapper/gradle-wrapper.jar "$GITHUB_WORKSPACE/android-companion/$WRAPPER_JAR"
+            cd "$GITHUB_WORKSPACE/android-companion"
+          }
+        fi
+
+        echo "Verifying wrapper JAR..."
+        ls -la "$WRAPPER_JAR"
+        unzip -t "$WRAPPER_JAR" | tail -1
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       working-directory: android-companion
-      
+
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon --stacktrace
       working-directory: android-companion
-      
+
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: framereader-debug-apk
         path: android-companion/app/build/outputs/apk/debug/app-debug.apk
         retention-days: 90
-        
+
     - name: Create Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
