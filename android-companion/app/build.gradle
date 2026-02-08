@@ -15,10 +15,20 @@ android {
         versionName "1.0.2"
     }
 
+    signingConfigs {
+        release {
+            storeFile file("${rootDir}/release.keystore")
+            storePassword "framereader123"
+            keyAlias "framereader"
+            keyPassword "framereader123"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
     
