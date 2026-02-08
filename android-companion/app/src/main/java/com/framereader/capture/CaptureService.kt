@@ -100,19 +100,20 @@ class CaptureService : Service() {
         val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = projectionManager.getMediaProjection(resultCode, data)
         
-        val wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        wm.defaultDisplay.getRealMetrics(metrics)
+        // Use stored screen dimensions (already detected in MainActivity)
+        val width = FrameReaderApp.screenWidth
+        val height = FrameReaderApp.screenHeight
+        val density = resources.displayMetrics.densityDpi
         
-        val width = metrics.widthPixels
-        val height = metrics.heightPixels
-        val density = metrics.densityDpi
+        // Samsung optimization: Use lower density for smaller file sizes
+        // S25 has high DPI (450+), we can reduce to 320 for efficiency
+        val captureDensity = minOf(density, 320)
         
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
         
         virtualDisplay = mediaProjection?.createVirtualDisplay(
             "FrameReader",
-            width, height, density,
+            width, height, captureDensity,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             imageReader?.surface, null, null
         )
@@ -155,7 +156,9 @@ class CaptureService : Service() {
     
     private fun bitmapToBase64(bitmap: Bitmap): String {
         val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+        // Samsung S25 optimization: Use 70% quality for smaller uploads
+        // Still high enough for OCR accuracy
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
         return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
     
