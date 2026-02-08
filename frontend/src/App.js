@@ -590,7 +590,17 @@ function Home() {
                   {mobileSessionStatus === 'capturing' && (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-[#3b82f6]" />
-                      <span className="font-mono text-xs text-[#3b82f6]">RECEIVING FRAMES...</span>
+                      <span className="font-mono text-xs text-[#3b82f6]">
+                        RECEIVING FRAMES{mobileSession?.frames_count > 0 ? ` (${mobileSession.frames_count})` : ''}...
+                      </span>
+                    </>
+                  )}
+                  {mobileSessionStatus === 'captured' && (
+                    <>
+                      <Check className="w-4 h-4 text-[#22c55e]" />
+                      <span className="font-mono text-xs text-[#22c55e]">
+                        {mobileSession?.frames_count || 0} FRAMES CAPTURED - READY
+                      </span>
                     </>
                   )}
                   {mobileSessionStatus === 'processing' && (
