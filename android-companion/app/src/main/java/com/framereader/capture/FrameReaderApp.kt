@@ -12,7 +12,7 @@ class FrameReaderApp : Application() {
         const val CHANNEL_NAME = "Screen Capture"
         
         // API Configuration
-        var apiUrl = "https://framereader.preview.emergentagent.com/api"
+        var apiUrl = "https://frame-extract-lab.preview.emergentagent.com/api"
         var sessionCode = ""
         
         // Capture Settings

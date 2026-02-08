@@ -49,7 +49,7 @@
 ## After Installation
 
 1. Open **FrameReader** app
-2. On your computer, go to: https://framereader.preview.emergentagent.com
+2. On your computer, go to: https://frame-extract-lab.preview.emergentagent.com
 3. Click **"MOBILE CAPTURE"** button
 4. Enter the 6-digit code into the app
 5. Tap **CONNECT**

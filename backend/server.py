@@ -864,7 +864,7 @@ async def get_tasker_profile(session_code: str):
     <Action sr="act1" ve="7">
       <code>547</code>
       <Str sr="arg0" ve="3">api_url</Str>
-      <Str sr="arg1" ve="3">https://framereader.preview.emergentagent.com/api</Str>
+      <Str sr="arg1" ve="3">https://frame-extract-lab.preview.emergentagent.com/api</Str>
     </Action>
     <Action sr="act2" ve="7">
       <code>547</code>
@@ -910,7 +910,7 @@ async def get_adb_script(session_code: str):
 # Session: {session_code}
 # Generated for screen height: {screen_height}px
 
-API_URL="https://framereader.preview.emergentagent.com/api"
+API_URL="https://frame-extract-lab.preview.emergentagent.com/api"
 SESSION="{session_code}"
 SCROLL_PX={scroll_px}
 INTERVAL={interval}

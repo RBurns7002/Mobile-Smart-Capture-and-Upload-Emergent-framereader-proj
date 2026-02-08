@@ -29,7 +29,7 @@
       "actionType": "SetVariable",
       "config": {
         "variableName": "api_url",
-        "variableValue": "https://framereader.preview.emergentagent.com/api"
+        "variableValue": "https://frame-extract-lab.preview.emergentagent.com/api"
       }
     },
     {
