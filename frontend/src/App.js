@@ -133,7 +133,7 @@ function Home() {
 
   // Poll for mobile session status
   useEffect(() => {
-    if (mobileSession && mobileSessionStatus !== 'completed' && mobileSessionStatus !== 'failed') {
+    if (mobileSession && mobileSessionStatus !== 'completed' && mobileSessionStatus !== 'failed' && mobileSessionStatus !== 'captured') {
       mobilePollRef.current = setInterval(async () => {
         try {
           const response = await axios.get(`${API}/mobile/session/${mobileSession.session_id}`);
@@ -148,22 +148,33 @@ function Home() {
                 screen_width: sessionData.device_info.screenWidth,
                 screen_height: sessionData.device_info.screenHeight,
                 pixel_ratio: sessionData.device_info.pixelRatio,
-              }
+              },
+              frames_count: (sessionData.frames || []).length
             }));
           }
-          
-          if (sessionData.status === 'completed') {
+
+          if (sessionData.status === 'captured') {
+            setMobileSession(prev => ({
+              ...prev,
+              frames_count: (sessionData.frames || []).length
+            }));
+            clearInterval(mobilePollRef.current);
+          } else if (sessionData.status === 'capturing') {
+            setMobileSession(prev => ({
+              ...prev,
+              frames_count: (sessionData.frames || []).length
+            }));
+          } else if (sessionData.status === 'completed') {
             toast.success("Mobile capture processed!", { 
               description: `${sessionData.deduplicated_count || 0} unique text blocks extracted` 
             });
-            // Load transcripts into current job view
             if (sessionData.processed_transcripts?.length > 0) {
               setCurrentJob({
                 id: mobileSession.session_id,
                 status: 'completed',
                 transcripts: sessionData.processed_transcripts.map((t, i) => ({
                   ...t,
-                  timestamp: i * 2, // Approximate timestamps
+                  timestamp: i * 2,
                 })),
                 source: 'mobile'
               });
