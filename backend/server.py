@@ -690,8 +690,26 @@ async def upload_mobile_batch(session_code: str, frames: List[dict]):
     return {"status": "uploaded", "frames_count": len(processed_frames)}
 
 @api_router.post("/mobile/complete-capture/{session_code}")
-async def complete_mobile_capture(session_code: str, background_tasks: BackgroundTasks):
-    """Mark capture as complete and start OCR processing."""
+async def complete_mobile_capture(session_code: str):
+    """Mark capture as complete. Does NOT auto-process — user can review, crop, and benchmark first."""
+    session = await db.mobile_sessions.find_one({"session_code": session_code})
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid session code")
+    
+    await db.mobile_sessions.update_one(
+        {"session_code": session_code},
+        {"$set": {"status": "captured"}}
+    )
+    
+    return {
+        "status": "captured",
+        "session_id": session["session_id"],
+        "frames_count": len(session.get("frames", []))
+    }
+
+@api_router.post("/mobile/process/{session_code}")
+async def process_mobile_session(session_code: str, background_tasks: BackgroundTasks):
+    """Manually trigger OCR processing for a captured mobile session."""
     session = await db.mobile_sessions.find_one({"session_code": session_code})
     if not session:
         raise HTTPException(status_code=404, detail="Invalid session code")
@@ -701,7 +719,6 @@ async def complete_mobile_capture(session_code: str, background_tasks: Backgroun
         {"$set": {"status": "processing", "processing_status": "queued"}}
     )
     
-    # Start background OCR processing
     background_tasks.add_task(process_mobile_capture, session["session_id"])
     
     return {"status": "processing", "session_id": session["session_id"], "frames_count": len(session.get("frames", []))}
