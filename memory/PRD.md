@@ -29,34 +29,30 @@ Create an app that takes a video that I record of my phone screen and is able to
 - ✅ Drag & drop video upload zone
 - ✅ Frame interval selector (0.5s, 1.0s, 2.0s, 3.0s)
 - ✅ **Frame Crop controls** - Adjust top/bottom/left/right margins (0-45%) with visual overlay preview
-- ✅ **Benchmark Mode** with side-by-side transcript comparison:
-  - Two independent transcript panels (UNCROPPED vs CROPPED)
-  - Per-instance timing metrics (compute time for each)
-  - Similarity percentage
-  - Extra artifacts detection
-  - Real-time progress for both processes
-- ✅ **Mobile Capture Mode (SaaS Feature) - Enhanced**:
-  - One-tap session creation with 6-digit pairing code + QR
-  - **Auto-detects screen resolution** on mobile connect (e.g., 1920×1080px)
-  - **Calculates scroll/overlap in pixels** based on screen size
-  - Two capture modes:
-    - **START RECORDING** - Launches native Android screen recorder
-    - **AUTO CAPTURE** - Browser-based screen share with interval capture
-  - **4 Tunable Controls** with live pixel calculations:
-    - Scroll Distance: 50-100% (shows calculated pixels)
-    - Capture Interval: 500ms-5s
-    - Overlap Margin: 0-30% (shows calculated pixels)
-    - Total Captures: 5-50
-  - **Dynamic ADB Script** - Pre-filled with device-specific values for non-browser apps
-  - Auto-pause/resume during capture
-  - Automatic transcript deduplication (85% similarity threshold)
-  - Real-time status sync between desktop and mobile
-- ✅ Background job processing with progress tracking
+- ✅ **Benchmark Mode** with side-by-side transcript comparison
+- ✅ **Mobile Capture Mode (SaaS Feature) - Full Integration**:
+  - Auto-detects screen resolution on connect
+  - Live pixel calculations for scroll/overlap
+  - Two capture modes: Native Recorder + Browser Auto-Capture
+  - **Android Companion App** (Kotlin) - Full source code
+  - **Tasker Automation Profile** - Pre-configured XML
+  - **MacroDroid Macro** - JSON export
+  - **ADB Script Generator** - Session-specific, downloadable
+  - Accessibility Service for cross-app auto-scroll
+  - MediaProjection API for screen capture
+  - Real-time upload with deduplication
 - ✅ GPT-4o vision OCR integration via Emergent LLM Key
-- ✅ Timestamped transcript display with terminal-style output
-- ✅ Copy to clipboard functionality
-- ✅ Export to TXT file download
-- ✅ Responsive design
+- ✅ Timestamped transcript display
+- ✅ Export to TXT + Copy to clipboard
+
+## Android Companion Files (/app/android-companion/)
+- `README.md` - Setup instructions for all options
+- `automation/framereader_tasker.xml` - Tasker profile
+- `automation/framereader_macrodroid.json` - MacroDroid macro
+- `app/` - Full Android app source (Kotlin)
+  - MainActivity.kt - Main UI with settings
+  - CaptureService.kt - Screen capture via MediaProjection
+  - AutoScrollService.kt - Accessibility-based scrolling
 
 ## API Endpoints
 - `POST /api/upload-video` - Upload video file

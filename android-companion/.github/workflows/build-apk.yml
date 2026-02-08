@@ -1,0 +1,67 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'android-companion/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'android-companion/**'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+        
+    - name: Grant execute permission for gradlew
+      run: chmod +x android-companion/gradlew
+      working-directory: ${{ github.workspace }}
+      
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon
+      working-directory: android-companion
+      
+    - name: Build Release APK
+      run: ./gradlew assembleRelease --no-daemon
+      working-directory: android-companion
+      
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: framereader-debug
+        path: android-companion/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+        
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: framereader-release
+        path: android-companion/app/build/outputs/apk/release/app-release-unsigned.apk
+        retention-days: 30
+        
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ github.run_number }}
+        name: FrameReader Android v${{ github.run_number }}
+        files: |
+          android-companion/app/build/outputs/apk/debug/app-debug.apk
+          android-companion/app/build/outputs/apk/release/app-release-unsigned.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
