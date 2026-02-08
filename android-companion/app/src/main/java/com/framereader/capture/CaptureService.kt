@@ -210,25 +210,27 @@ class CaptureService : Service() {
                 updateNotification("$i/$totalCaptures")
                 Log.d(TAG, "--- Frame $i/$totalCaptures ---")
 
-                // Wait briefly for the screen buffer to have current content
-                delay(150)
+                // Capture with quick retries if buffer isn't ready
+                var bitmap: Bitmap? = null
+                for (attempt in 1..5) {
+                    delay(100)
+                    bitmap = captureScreen()
+                    if (bitmap != null) break
+                }
 
-                // Capture
-                val bitmap = captureScreen()
                 if (bitmap != null) {
                     capturedCount = i
                     val base64 = bitmapToBase64(bitmap)
                     bitmap.recycle()
                     Log.d(TAG, "Frame $i captured (${base64.length / 1024}KB)")
 
-                    // Upload in background (don't block the loop)
                     if (sessionCode.isNotEmpty() && apiUrl.isNotEmpty()) {
                         uploadJobs.add(scope.launch {
                             uploadFrame(apiUrl, sessionCode, i, base64)
                         })
                     }
                 } else {
-                    Log.w(TAG, "Frame $i: null bitmap, skipping")
+                    Log.w(TAG, "Frame $i: null after 5 attempts, skipping")
                 }
 
                 // Scroll + settle (only between frames, not after the last one)
