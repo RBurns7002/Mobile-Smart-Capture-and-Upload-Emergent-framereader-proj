@@ -57,6 +57,19 @@ jobs:
         ls -la "$WRAPPER_JAR"
         unzip -t "$WRAPPER_JAR" | tail -1
 
+    - name: Create consistent signing keystore
+      run: |
+        KEYSTORE_PATH="$HOME/.android/debug.keystore"
+        if [ ! -f "$KEYSTORE_PATH" ]; then
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE_PATH" \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 36500 \
+            -storepass android -keypass android \
+            -dname "CN=FrameReader,O=FrameReader,C=US"
+        fi
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       working-directory: android-companion
